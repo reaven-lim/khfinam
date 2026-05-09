@@ -11,11 +11,38 @@ final class TransactionRepository
 {
     private const FLOW_EXCLUDE_INTERNAL = " AND COALESCE(is_internal_transfer,0) = 0 ";
 
+    private const LIST_SELECT_FIELDS = <<<'SQL'
+t.*,
+  CASE WHEN t.type = 'transfer' THEN CONCAT(IFNULL(fw.name,''), ' → ', IFNULL(tw.name,'')) ELSE sw.name END AS wallet_name,
+  CASE WHEN t.type = 'transfer' THEN 'Transfer' ELSE c.name END AS category_name
+SQL;
+
+    private const LIST_JOINS = <<<'SQL'
+FROM transactions t
+LEFT JOIN wallets sw ON sw.id = t.wallet_id
+LEFT JOIN wallets fw ON fw.id = t.from_wallet_id
+LEFT JOIN wallets tw ON tw.id = t.to_wallet_id
+LEFT JOIN categories c ON c.id = t.category_id
+SQL;
+
+    /** @return array{0: string, 1: string} [select_clause, joins_clause flattened] */
+    public static function listingSelectFragments(): array
+    {
+        $sel = preg_replace('/\s+/', ' ', trim(self::LIST_SELECT_FIELDS)) ?? '';
+        $join = preg_replace('/\s+/', ' ', trim(self::LIST_JOINS)) ?? '';
+
+        return [$sel, ' ' . $join];
+    }
+
+    /** Income / expense KPIs exclude internal paired rows and exclude transfer ledger type. */
+    private const FLOW_TYPES_PNL = " AND type IN ('income','expense') ";
+
     /** @return array{income: float, expense: float, savings: float} */
     public function globalTotals(?string $from = null, ?string $to = null, bool $excludeInternal = true): array
     {
         $pdo = Database::pdo();
         $sql = "SELECT type, COALESCE(SUM(amount_base),0) AS s FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL";
+        $sql .= self::FLOW_TYPES_PNL;
         if ($excludeInternal) {
             $sql .= self::FLOW_EXCLUDE_INTERNAL;
         }
@@ -40,6 +67,7 @@ final class TransactionRepository
     {
         $pdo = Database::pdo();
         $sql = "SELECT type, COALESCE(SUM(amount_base),0) AS s FROM transactions WHERE user_id = ? AND deleted_at IS NULL AND parent_transaction_id IS NULL";
+        $sql .= self::FLOW_TYPES_PNL;
         if ($excludeInternal) {
             $sql .= self::FLOW_EXCLUDE_INTERNAL;
         }
@@ -85,12 +113,10 @@ final class TransactionRepository
     public function recentForUser(int $userId, int $limit = 20): array
     {
         $pdo = Database::pdo();
+        [$ls, $lj] = self::listingSelectFragments();
         $stmt = $pdo->prepare(
-            'SELECT t.*, w.name AS wallet_name, c.name AS category_name
-             FROM transactions t
-             JOIN wallets w ON w.id = t.wallet_id
-             JOIN categories c ON c.id = t.category_id
-             WHERE t.user_id = ? AND t.deleted_at IS NULL AND t.parent_transaction_id IS NULL
+            'SELECT ' . $ls . $lj
+             . ' WHERE t.user_id = ? AND t.deleted_at IS NULL AND t.parent_transaction_id IS NULL
              ORDER BY t.transaction_date DESC, t.id DESC
              LIMIT ' . (int) $limit
         );
@@ -103,11 +129,10 @@ final class TransactionRepository
     public function findByIdForUser(int $id, int $userId): ?array
     {
         $pdo = Database::pdo();
+        [$ls, $lj] = self::listingSelectFragments();
         $stmt = $pdo->prepare(
-            'SELECT t.*, w.name AS wallet_name, c.name AS category_name FROM transactions t
-             JOIN wallets w ON w.id = t.wallet_id
-             JOIN categories c ON c.id = t.category_id
-             WHERE t.id = ? AND t.user_id = ? AND t.deleted_at IS NULL LIMIT 1'
+            'SELECT ' . $ls . $lj
+             . ' WHERE t.id = ? AND t.user_id = ? AND t.deleted_at IS NULL LIMIT 1'
         );
         $stmt->execute([$id, $userId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -184,7 +209,7 @@ final class TransactionRepository
             $clauses[] = 't.transaction_date <= ?';
             $params[] = $to;
         }
-        if ($type === 'income' || $type === 'expense') {
+        if ($type === 'income' || $type === 'expense' || $type === 'transfer') {
             $clauses[] = 't.type = ?';
             $params[] = $type;
         }

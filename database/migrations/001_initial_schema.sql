@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `audit_logs`;
 DROP TABLE IF EXISTS `backups`;
 DROP TABLE IF EXISTS `wallets`;
+DROP TABLE IF EXISTS `wallet_types`;
 DROP TABLE IF EXISTS `categories`;
 DROP TABLE IF EXISTS `exchange_rates`;
 DROP TABLE IF EXISTS `currencies`;
@@ -110,11 +111,32 @@ CREATE TABLE `categories` (
   CONSTRAINT `categories_parent_fk` FOREIGN KEY (`parent_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE `wallet_types` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `slug` varchar(64) NOT NULL,
+  `label` varchar(128) NOT NULL,
+  `icon` varchar(64) NOT NULL DEFAULT 'wallet',
+  `sort_order` smallint unsigned NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `is_system` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `wallet_types_slug_unique` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `wallet_types` (`slug`, `label`, `icon`, `sort_order`, `is_system`) VALUES
+('cash', 'Cash', 'banknote', 10, 1),
+('bank', 'Bank', 'landmark', 20, 1),
+('ewallet', 'E-wallet', 'smartphone', 30, 1),
+('credit_card', 'Credit card', 'credit-card', 40, 1),
+('other', 'Other', 'wallet', 90, 1);
+
 CREATE TABLE `wallets` (
   `id` int unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int unsigned NOT NULL,
   `name` varchar(128) NOT NULL,
-  `wallet_type` enum('cash','bank','ewallet','credit_card','other') NOT NULL DEFAULT 'cash',
+  `wallet_type_id` int unsigned NOT NULL,
   `currency_id` int unsigned NOT NULL,
   `opening_balance` decimal(18,4) NOT NULL DEFAULT 0.0000,
   `min_balance_threshold` decimal(18,4) DEFAULT NULL,
@@ -126,8 +148,10 @@ CREATE TABLE `wallets` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `wallets_user_id` (`user_id`),
+  KEY `wallets_wallet_type_id` (`wallet_type_id`),
   CONSTRAINT `wallets_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `wallets_currency_fk` FOREIGN KEY (`currency_id`) REFERENCES `currencies` (`id`)
+  CONSTRAINT `wallets_currency_fk` FOREIGN KEY (`currency_id`) REFERENCES `currencies` (`id`),
+  CONSTRAINT `wallets_wallet_type_fk` FOREIGN KEY (`wallet_type_id`) REFERENCES `wallet_types` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `recurring_schedules` (
@@ -163,10 +187,12 @@ CREATE TABLE `recurring_schedules` (
 CREATE TABLE `transactions` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `user_id` int unsigned NOT NULL,
-  `wallet_id` int unsigned NOT NULL,
-  `category_id` int unsigned NOT NULL,
+  `wallet_id` int unsigned DEFAULT NULL,
+  `from_wallet_id` int unsigned DEFAULT NULL,
+  `to_wallet_id` int unsigned DEFAULT NULL,
+  `category_id` int unsigned DEFAULT NULL,
   `parent_transaction_id` bigint unsigned DEFAULT NULL,
-  `type` enum('income','expense') NOT NULL,
+  `type` enum('income','expense','transfer') NOT NULL,
   `title` varchar(255) NOT NULL,
   `amount` decimal(18,4) NOT NULL,
   `amount_base` decimal(18,4) NOT NULL,
@@ -183,11 +209,15 @@ CREATE TABLE `transactions` (
   PRIMARY KEY (`id`),
   KEY `tx_user_date` (`user_id`,`transaction_date`,`deleted_at`),
   KEY `tx_wallet` (`wallet_id`,`transaction_date`),
+  KEY `tx_from_wallet` (`from_wallet_id`),
+  KEY `tx_to_wallet` (`to_wallet_id`),
   KEY `tx_category` (`category_id`),
   KEY `tx_parent` (`parent_transaction_id`),
   KEY `tx_recurring` (`recurring_schedule_id`),
   CONSTRAINT `tx_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tx_wallet_fk` FOREIGN KEY (`wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `transactions_from_wallet_fk` FOREIGN KEY (`from_wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `transactions_to_wallet_fk` FOREIGN KEY (`to_wallet_id`) REFERENCES `wallets` (`id`) ON DELETE CASCADE,
   CONSTRAINT `tx_category_fk` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`),
   CONSTRAINT `tx_currency_fk` FOREIGN KEY (`currency_id`) REFERENCES `currencies` (`id`),
   CONSTRAINT `tx_parent_fk` FOREIGN KEY (`parent_transaction_id`) REFERENCES `transactions` (`id`) ON DELETE CASCADE,

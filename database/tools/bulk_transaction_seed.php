@@ -32,8 +32,8 @@ if (! $expenseCats || ! $incomeCats) {
 }
 
 $ins = $pdo->prepare(
-    'INSERT INTO transactions (user_id, wallet_id, category_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, transaction_date, created_by, is_consolidated_parent)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,0)'
+    'INSERT INTO transactions (user_id, wallet_id, from_wallet_id, to_wallet_id, category_id, parent_transaction_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, notes, transaction_date, created_by, recurring_schedule_id, is_consolidated_parent, is_internal_transfer, transfer_group)
+     VALUES (?,?,NULL,NULL,?,NULL,?,?,?,?,?,NULL,?,?,?,?,0,0,NULL)'
 );
 
 $rng = static fn (int $a, int $b): int => random_int($a, $b);
@@ -46,7 +46,7 @@ for ($i = 0; $i < 220; $i++) {
     $amount = $income ? $rng(50, 800) + (random_int(0, 99) / 100) : $rng(5, 250) + (random_int(0, 99) / 100);
     $type = $income ? 'income' : 'expense';
     $title = $income ? 'Sample income #' . $i : 'Sample expense #' . $i;
-    $ins->execute([$uid, $wid, $catId, $type, $title, $amount, $amount, 1, 1.0, $d, $uid]);
+    $ins->execute([$uid, $wid, $catId, $type, $title, $amount, $amount, 1, 1.0, $d, $uid, null]);
 }
 
 echo "Inserted 220 sample transactions for demo user.\n";

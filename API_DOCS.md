@@ -30,10 +30,12 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 |--------|------|-------------|
 | GET | `/app` | Dashboard (balance, income/expense, upcoming recurring, recent transactions) |
 | GET | `/app/add` | Add transaction form |
-| POST | `/app/add` | Create transaction (`type`, `title`, `amount`, `wallet_id`, `category_id`, `transaction_date`, `notes`, optional `is_consolidated_parent`, `tags`) |
+| POST | `/app/add` | Create transaction: `type` = `income` or `expense` → `wallet_id`, `category_id`, `title`, `amount`, `transaction_date`, `notes`, optional `is_consolidated_parent`, `tags`. `type` = **`transfer`** → `from_wallet_id`, `to_wallet_id`, `amount`, `transaction_date`, optional `title`/`notes`/`tags` (same currency; **not** counted as income/expense). |
 | GET | `/app/wallets` | Wallet list + balances |
-| POST | `/app/wallets` | Create wallet (`name`, `wallet_type`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `notes`) |
-| POST | `/app/wallets/transfer` | Internal wallet transfer (`from_wallet_id`, `to_wallet_id`, `amount`, `date`, `notes`) |
+| POST | `/app/wallets` | Create wallet (`name`, **`wallet_type_id`** (preferred), optional legacy `wallet_type` slug string, `currency_id`, `opening_balance`, `min_balance_threshold`, optional `sort_order`, `is_default`, `is_active`, `notes`) |
+| POST | `/app/wallets/update` | Update wallet (`wallet_id`, same fields as create; `is_active` omitted or unchecked saves as inactive) |
+| POST | `/app/wallets/delete` | Hard-delete wallet only if no transactions/recurring refs (`wallet_id`) |
+| POST | `/app/wallets/transfer` | Wallet transfer (same as add **transfer**): one ledger row with `type=transfer` (`from_wallet_id`, `to_wallet_id`, `amount`, **`transfer_date`** (Y-m-d), `notes`) |
 | GET | `/app/stats` | Statistics: bar chart, savings rate, expense heatmap |
 | GET | `/app/notifications` | Notification list (unread highlighted) |
 | POST | `/app/notifications/read` | Mark one notification read (`notification_id`) |
@@ -57,7 +59,7 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/app/transaction/{id}` | View/edit transaction detail |
-| POST | `/app/transaction/{id}` | Update transaction (title, amount, notes, tags, wallet_id, category_id, date) |
+| POST | `/app/transaction/{id}` | Update transaction (title, amount, notes, tags, date; for **transfer** rows also `from_wallet_id`, `to_wallet_id`; income/expense use `wallet_id`, `category_id`, `type`) |
 | POST | `/app/transaction/{id}/delete` | Soft-delete transaction |
 | POST | `/app/transaction/{id}/attach` | Upload attachment (multipart `attachment` file) |
 | POST | `/app/transaction/{id}/attach-delete` | Delete attachment (`attachment_id`) |
@@ -72,6 +74,8 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/admin` | Overview: user count, transaction count, global savings, chart |
+| GET | `/admin/wallets` | All users’ wallets (filter `user_id`), create form; edit/deactivate/delete per wallet |
+| GET | `/admin/wallet-types` | Manage customizable wallet/account type labels (system + custom) |
 | GET | `/admin/transactions` | Transactions (filter: `user_id`, `from`, `to`, `type`) |
 | GET | `/admin/users` | User list |
 | GET | `/admin/categories` | Category list + inline edit/delete forms |
@@ -89,6 +93,17 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 |--------|------|-------------|
 | POST | `/admin/users` | Create user (`username`, `email`, `password`, `full_name`, `role`) |
 | POST | `/admin/users/update` | Update user (`user_id`, `email`, `full_name`, `role`, `is_active`, `new_password`) |
+
+### Wallets & wallet types (admin)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/wallets/store` | Create wallet for any user (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `sort_order`, `is_default`, `is_active`, `notes`) |
+| POST | `/admin/wallets/update` | Update wallet (`wallet_user_id`, `wallet_id`, same body fields as store) |
+| POST | `/admin/wallets/delete` | Hard-delete empty wallet (`wallet_user_id`, `wallet_id`) |
+| POST | `/admin/wallet-types/store` | Create custom type (`slug`, `label`, `icon`, `sort_order`, `is_active`) |
+| POST | `/admin/wallet-types/update` | Update type label/icon/order/active (`type_id`, …) |
+| POST | `/admin/wallet-types/delete` | Delete custom unused type (`type_id`; system types protected) |
 
 ### Category management
 

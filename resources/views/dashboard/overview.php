@@ -192,7 +192,7 @@ $getCatIcon = function (string $name) use ($catIconMap): string {
     </div>
     <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-none">
         <?php foreach ($wallets as $w):
-            $wType = (string) ($w['wallet_type'] ?? 'other');
+            $wType = (string) ($w['type_slug'] ?? 'other');
             $wCfg  = $walletConfig[$wType] ?? $walletConfig['other'];
         ?>
         <a href="<?= Str::e(Url::to('/dashboard/wallets')) ?>"

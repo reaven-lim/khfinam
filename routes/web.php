@@ -6,6 +6,7 @@ use App\Controllers\Admin\AdminDashboardController;
 use App\Controllers\Admin\AdminFormController;
 use App\Controllers\Api\ReportApiController;
 use App\Controllers\Dashboard\DashboardController;
+use App\Controllers\Dashboard\DashboardWalletController;
 use App\Controllers\AuthController;
 use App\Controllers\Mobile\MobileAppController;
 use App\Controllers\Mobile\NotificationController;
@@ -36,6 +37,8 @@ return [
     'POST /app/recurring/run' => [RecurringMobileController::class, 'runNow'],
     'GET /app/wallets' => [MobileAppController::class, 'wallets'],
     'POST /app/wallets' => [WalletActionController::class, 'create'],
+    'POST /app/wallets/update' => [WalletActionController::class, 'update'],
+    'POST /app/wallets/delete' => [WalletActionController::class, 'delete'],
     'POST /app/wallets/transfer' => [WalletActionController::class, 'transfer'],
     'GET /app/stats' => [MobileAppController::class, 'stats'],
     'GET /app/notifications' => [MobileAppController::class, 'notifications'],
@@ -54,6 +57,9 @@ return [
     'GET /dashboard' => [DashboardController::class, 'index'],
     'GET /dashboard/transactions' => [DashboardController::class, 'transactions'],
     'GET /dashboard/wallets' => [DashboardController::class, 'wallets'],
+    'POST /dashboard/wallets/store' => [DashboardWalletController::class, 'store'],
+    'POST /dashboard/wallets/update' => [DashboardWalletController::class, 'update'],
+    'POST /dashboard/wallets/delete' => [DashboardWalletController::class, 'delete'],
     'GET /dashboard/recurring' => [DashboardController::class, 'recurring'],
     'GET /dashboard/reports' => [DashboardController::class, 'reports'],
     'GET /dashboard/reports/csv' => [DashboardController::class, 'reportsCsv'],
@@ -63,6 +69,14 @@ return [
     'GET /admin' => [AdminDashboardController::class, 'index'],
     'GET /admin/transactions' => [AdminDashboardController::class, 'transactions'],
     'GET /admin/users' => [AdminDashboardController::class, 'users'],
+    'GET /admin/wallets' => [AdminDashboardController::class, 'wallets'],
+    'POST /admin/wallets/store' => [AdminFormController::class, 'walletStore'],
+    'POST /admin/wallets/update' => [AdminFormController::class, 'walletUpdate'],
+    'POST /admin/wallets/delete' => [AdminFormController::class, 'walletDelete'],
+    'GET /admin/wallet-types' => [AdminDashboardController::class, 'walletTypes'],
+    'POST /admin/wallet-types/store' => [AdminFormController::class, 'walletTypeStore'],
+    'POST /admin/wallet-types/update' => [AdminFormController::class, 'walletTypeUpdate'],
+    'POST /admin/wallet-types/delete' => [AdminFormController::class, 'walletTypeDelete'],
     'GET /admin/notifications' => [AdminDashboardController::class, 'notifications'],
     'GET /admin/settings' => [AdminDashboardController::class, 'settings'],
     'POST /admin/notifications/broadcast' => [AdminFormController::class, 'notificationBroadcast'],

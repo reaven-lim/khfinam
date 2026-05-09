@@ -9,8 +9,10 @@ use App\Core\Request;
 use App\Core\Session;
 use App\Helpers\Auth;
 use App\Helpers\View;
+use App\Repositories\CurrencyRepository;
 use App\Repositories\TransactionRepository;
 use App\Repositories\WalletRepository;
+use App\Repositories\WalletTypeRepository;
 use App\Services\ReportPdfService;
 use App\Services\TransactionIntelligenceService;
 use App\Services\WalletService;
@@ -87,7 +89,7 @@ final class DashboardController
     {
         Auth::requireLogin();
         $uid = (int) Auth::id();
-        $wallets = (new WalletRepository())->forUser($uid);
+        $wallets = (new WalletRepository())->forUser($uid, false);
         $balances = (new WalletService())->walletBalancesForUser($uid);
         $map = [];
         foreach ($balances as $b) {
@@ -116,6 +118,10 @@ final class DashboardController
             'wallets' => $wallets,
             'balances' => $map,
             'flowRows' => $flowRows,
+            'walletTypes' => (new WalletTypeRepository())->allOrdered(true),
+            'currencies' => (new CurrencyRepository())->allActive(),
+            'message' => Session::getFlash('message'),
+            'error' => Session::getFlash('error'),
             'user' => Auth::user(),
         ]);
     }

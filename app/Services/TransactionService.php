@@ -17,6 +17,9 @@ final class TransactionService
      */
     public function createForUser(int $userId, array $data): int
     {
+        if (strtolower((string) ($data['type'] ?? '')) === 'transfer') {
+            throw new \InvalidArgumentException('Use the transfer form to move money between wallets.');
+        }
         $pdo = Database::pdo();
         $parentId = isset($data['parent_transaction_id']) ? (int) $data['parent_transaction_id'] : null;
         $row = $this->buildInsertRow($userId, $data, $parentId);
@@ -58,6 +61,77 @@ final class TransactionService
     }
 
     /**
+     * Native wallet-to-wallet move: one row, type `transfer`. Does not affect income/expense KPIs.
+     *
+     * @param array{title?:string,amount:float,from_wallet_id:int,to_wallet_id:int,transaction_date:string,notes?:?string,tags?:array<int,string>} $data
+     */
+    public function createTransferForUser(int $userId, array $data): int
+    {
+        $pdo = Database::pdo();
+        $fromId = (int) ($data['from_wallet_id'] ?? 0);
+        $toId = (int) ($data['to_wallet_id'] ?? 0);
+        if ($fromId <= 0 || $toId <= 0 || $fromId === $toId) {
+            throw new \InvalidArgumentException('Choose two different wallets for the transfer.');
+        }
+        $amount = round((float) ($data['amount'] ?? 0), 4);
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('Amount must be positive.');
+        }
+        $date = (string) ($data['transaction_date'] ?? date('Y-m-d'));
+        $wStmt = $pdo->prepare('SELECT * FROM wallets WHERE id = ? AND user_id = ? AND is_active = 1 LIMIT 1');
+        $wStmt->execute([$fromId, $userId]);
+        $wFrom = $wStmt->fetch(PDO::FETCH_ASSOC);
+        $wStmt->execute([$toId, $userId]);
+        $wTo = $wStmt->fetch(PDO::FETCH_ASSOC);
+        if (! $wFrom || ! $wTo) {
+            throw new \InvalidArgumentException('Invalid wallet.');
+        }
+        if ((int) $wFrom['currency_id'] !== (int) $wTo['currency_id']) {
+            throw new \InvalidArgumentException('Both wallets must use the same currency for a transfer.');
+        }
+        $info = $this->resolveAmountBaseFromWallet($pdo, $userId, $fromId, $amount, $date);
+        $title = trim((string) ($data['title'] ?? ''));
+        if ($title === '') {
+            $title = 'Transfer · ' . (string) $wFrom['name'] . ' → ' . (string) $wTo['name'];
+        }
+        $row = [
+            'user_id' => $userId,
+            'wallet_id' => null,
+            'from_wallet_id' => $fromId,
+            'to_wallet_id' => $toId,
+            'category_id' => null,
+            'parent_transaction_id' => null,
+            'type' => 'transfer',
+            'title' => $title,
+            'amount' => $amount,
+            'amount_base' => $info['amount_base'],
+            'currency_id' => $info['currency_id'],
+            'exchange_rate_to_base' => $info['rate'],
+            'notes' => array_key_exists('notes', $data) ? (($data['notes'] !== null && (string) $data['notes'] !== '') ? (string) $data['notes'] : null) : null,
+            'transaction_date' => $date,
+            'created_by' => $userId,
+            'recurring_schedule_id' => null,
+            'is_consolidated_parent' => 0,
+            'is_internal_transfer' => 0,
+            'transfer_group' => null,
+        ];
+        $pdo->beginTransaction();
+        try {
+            $id = $this->insertRow($pdo, $row);
+            if (! empty($data['tags']) && is_array($data['tags'])) {
+                $this->syncTags($pdo, $id, $data['tags']);
+            }
+            $pdo->commit();
+            AuditLogger::log('transaction_transfer', $userId, 'transaction', (string) $id);
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+
+        return $id;
+    }
+
+    /**
      * @param array<string, mixed> $data
      */
     public function updateForUser(int $userId, int $transactionId, array $data): void
@@ -69,6 +143,13 @@ final class TransactionService
         if (! $cur) {
             $pdo->rollBack();
             throw new \InvalidArgumentException('Transaction not found.');
+        }
+        if (($cur['type'] ?? '') === 'transfer') {
+            $this->updateTransferForUserInTransaction($pdo, $userId, $transactionId, $cur, $data);
+            AuditLogger::log('transaction_update', $userId, 'transaction', (string) $transactionId);
+            $pdo->commit();
+
+            return;
         }
 
         $newType = isset($data['type']) ? ((string) $data['type'] === 'income' ? 'income' : 'expense') : (string) $cur['type'];
@@ -214,6 +295,117 @@ final class TransactionService
         ];
     }
 
+    /**
+     * Amount in wallet currency → base (no category validation).
+     *
+     * @return array{amount_base: float, currency_id: int, rate: float}
+     */
+    private function resolveAmountBaseFromWallet(PDO $pdo, int $userId, int $walletId, float $amount, string $date): array
+    {
+        $wStmt = $pdo->prepare('SELECT * FROM wallets WHERE id = ? AND user_id = ? LIMIT 1');
+        $wStmt->execute([$walletId, $userId]);
+        $wallet = $wStmt->fetch(PDO::FETCH_ASSOC);
+        if (! $wallet) {
+            throw new \InvalidArgumentException('Invalid wallet.');
+        }
+        $currencyId = (int) $wallet['currency_id'];
+        $base = $pdo->query('SELECT id FROM currencies WHERE is_base = 1 LIMIT 1')->fetch(PDO::FETCH_ASSOC);
+        $baseId = (int) ($base['id'] ?? 1);
+        $rate = 1.0;
+        if ($currencyId !== $baseId) {
+            $r = $pdo->prepare(
+                'SELECT rate FROM exchange_rates WHERE from_currency_id = ? AND to_currency_id = ? ORDER BY effective_date DESC LIMIT 1'
+            );
+            $r->execute([$currencyId, $baseId]);
+            $row = $r->fetch(PDO::FETCH_ASSOC);
+            $rate = $row ? (float) $row['rate'] : 1.0;
+        }
+        unset($date);
+
+        return [
+            'amount_base' => round($amount * $rate, 4),
+            'currency_id' => $currencyId,
+            'rate' => $rate,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $cur
+     * @param array<string, mixed> $data
+     */
+    private function updateTransferForUserInTransaction(PDO $pdo, int $userId, int $transactionId, array $cur, array $data): void
+    {
+        $newTitle = isset($data['title']) ? (string) $data['title'] : (string) $cur['title'];
+        $newAmount = isset($data['amount']) ? (float) $data['amount'] : (float) $cur['amount'];
+        $newDate = isset($data['transaction_date']) ? (string) $data['transaction_date'] : (string) $cur['transaction_date'];
+        $newNotes = array_key_exists('notes', $data) ? ($data['notes'] !== null ? (string) $data['notes'] : null) : ($cur['notes'] !== null ? (string) $cur['notes'] : null);
+        $newFrom = isset($data['from_wallet_id']) ? (int) $data['from_wallet_id'] : (int) ($cur['from_wallet_id'] ?? 0);
+        $newTo = isset($data['to_wallet_id']) ? (int) $data['to_wallet_id'] : (int) ($cur['to_wallet_id'] ?? 0);
+        if ($newFrom <= 0 || $newTo <= 0 || $newFrom === $newTo) {
+            throw new \InvalidArgumentException('Choose two different wallets for the transfer.');
+        }
+        if ($newAmount <= 0) {
+            throw new \InvalidArgumentException('Amount must be positive.');
+        }
+        $wStmt = $pdo->prepare('SELECT * FROM wallets WHERE id = ? AND user_id = ? LIMIT 1');
+        $wStmt->execute([$newFrom, $userId]);
+        $wFrom = $wStmt->fetch(PDO::FETCH_ASSOC);
+        $wStmt->execute([$newTo, $userId]);
+        $wTo = $wStmt->fetch(PDO::FETCH_ASSOC);
+        if (! $wFrom || ! $wTo) {
+            throw new \InvalidArgumentException('Invalid wallet.');
+        }
+        if ((int) $wFrom['currency_id'] !== (int) $wTo['currency_id']) {
+            throw new \InvalidArgumentException('Both wallets must use the same currency for a transfer.');
+        }
+        $rateInfo = $this->resolveAmountBaseFromWallet($pdo, $userId, $newFrom, $newAmount, $newDate);
+        $pdo->prepare(
+            'UPDATE transactions SET type = ?, title = ?, amount = ?, amount_base = ?, wallet_id = NULL, from_wallet_id = ?, to_wallet_id = ?,
+             category_id = NULL, currency_id = ?, exchange_rate_to_base = ?, notes = ?, transaction_date = ?, updated_at = NOW()
+             WHERE id = ? AND user_id = ?'
+        )->execute([
+            'transfer',
+            $newTitle,
+            $newAmount,
+            $rateInfo['amount_base'],
+            $newFrom,
+            $newTo,
+            $rateInfo['currency_id'],
+            $rateInfo['rate'],
+            $newNotes,
+            $newDate,
+            $transactionId,
+            $userId,
+        ]);
+        $changes = [
+            'before' => [
+                'title' => $cur['title'],
+                'amount' => $cur['amount'],
+                'from_wallet_id' => $cur['from_wallet_id'],
+                'to_wallet_id' => $cur['to_wallet_id'],
+                'transaction_date' => $cur['transaction_date'],
+            ],
+            'after' => [
+                'title' => $newTitle,
+                'amount' => $newAmount,
+                'from_wallet_id' => $newFrom,
+                'to_wallet_id' => $newTo,
+                'transaction_date' => $newDate,
+            ],
+        ];
+        $pdo->prepare(
+            'INSERT INTO transaction_edit_history (transaction_id, user_id, changes_json) VALUES (?,?,?)'
+        )->execute([
+            $transactionId,
+            $userId,
+            json_encode($changes, JSON_THROW_ON_ERROR),
+        ]);
+        if (isset($data['tags']) && is_array($data['tags'])) {
+            $pdo->prepare('DELETE FROM transaction_tags WHERE transaction_id = ?')->execute([$transactionId]);
+            $this->syncTags($pdo, $transactionId, $data['tags']);
+        }
+    }
+
     /** @param array<string, mixed> $data */
     private function buildInsertRow(int $userId, array $data, ?int $parentId): array
     {
@@ -236,6 +428,8 @@ final class TransactionService
         return [
             'user_id' => $userId,
             'wallet_id' => (int) $data['wallet_id'],
+            'from_wallet_id' => null,
+            'to_wallet_id' => null,
             'category_id' => (int) $data['category_id'],
             'parent_transaction_id' => $parentId,
             'type' => $type,
@@ -247,6 +441,7 @@ final class TransactionService
             'notes' => $data['notes'] ?? null,
             'transaction_date' => (string) $data['transaction_date'],
             'created_by' => $userId,
+            'recurring_schedule_id' => null,
             'is_consolidated_parent' => ! empty($data['is_consolidated_parent']) ? 1 : 0,
             'is_internal_transfer' => ! empty($data['is_internal_transfer']) ? 1 : 0,
             'transfer_group' => $data['transfer_group'] ?? null,
@@ -257,12 +452,14 @@ final class TransactionService
     private function insertRow(PDO $pdo, array $row): int
     {
         $stmt = $pdo->prepare(
-            'INSERT INTO transactions (user_id, wallet_id, category_id, parent_transaction_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, notes, transaction_date, created_by, is_consolidated_parent, is_internal_transfer, transfer_group)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO transactions (user_id, wallet_id, from_wallet_id, to_wallet_id, category_id, parent_transaction_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, notes, transaction_date, created_by, recurring_schedule_id, is_consolidated_parent, is_internal_transfer, transfer_group)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $row['user_id'],
             $row['wallet_id'],
+            $row['from_wallet_id'],
+            $row['to_wallet_id'],
             $row['category_id'],
             $row['parent_transaction_id'],
             $row['type'],
@@ -274,6 +471,7 @@ final class TransactionService
             $row['notes'],
             $row['transaction_date'],
             $row['created_by'],
+            $row['recurring_schedule_id'],
             $row['is_consolidated_parent'],
             $row['is_internal_transfer'],
             $row['transfer_group'],

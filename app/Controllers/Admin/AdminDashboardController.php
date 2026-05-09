@@ -14,6 +14,7 @@ use App\Repositories\UserRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\CurrencyRepository;
 use App\Repositories\WalletRepository;
+use App\Repositories\WalletTypeRepository;
 use App\Services\RecurringService;
 use App\Services\TransactionIntelligenceService;
 use PDO;
@@ -85,6 +86,41 @@ final class AdminDashboardController
         View::renderLayout('admin', 'admin/users', [
             'title' => 'Users',
             'rows' => $rows,
+            'user' => Auth::user(),
+        ]);
+    }
+
+    public function wallets(): void
+    {
+        Auth::requireSuperAdmin();
+        $filterUser = (int) (Request::query('user_id', '0') ?? '0');
+        $repo = new WalletRepository();
+        $rows = $repo->adminListAll($filterUser > 0 ? $filterUser : null);
+        $users = (new UserRepository())->all(500, 0);
+        $types = (new WalletTypeRepository())->allOrdered(false);
+        $currencies = (new CurrencyRepository())->allActive();
+        View::renderLayout('admin', 'admin/wallets', [
+            'title' => 'Wallets & accounts',
+            'rows' => $rows,
+            'users' => $users,
+            'walletTypes' => $types,
+            'currencies' => $currencies,
+            'filterUserId' => $filterUser,
+            'message' => \App\Core\Session::getFlash('message'),
+            'error' => \App\Core\Session::getFlash('error'),
+            'user' => Auth::user(),
+        ]);
+    }
+
+    public function walletTypes(): void
+    {
+        Auth::requireSuperAdmin();
+        $rows = (new WalletTypeRepository())->allOrdered(false);
+        View::renderLayout('admin', 'admin/wallet_types', [
+            'title' => 'Wallet account types',
+            'rows' => $rows,
+            'message' => \App\Core\Session::getFlash('message'),
+            'error' => \App\Core\Session::getFlash('error'),
             'user' => Auth::user(),
         ]);
     }

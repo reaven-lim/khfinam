@@ -14,6 +14,7 @@ khfinam/
 │   │   ├── AuthController.php
 │   │   ├── Admin/              # AdminDashboardController, AdminFormController
 │   │   ├── Api/                # ReportApiController (CSV/PDF/heatmap)
+│   │   ├── Dashboard/          # DashboardController, DashboardWalletController (user web wallets POST)
 │   │   └── Mobile/             # MobileAppController, TxnController, WalletActionController,
 │   │                           #   RecurringMobileController, NotificationController, ProfileController
 │   ├── Core/
@@ -37,7 +38,8 @@ khfinam/
 │   │   ├── SettingsRepository.php
 │   │   ├── TransactionRepository.php
 │   │   ├── UserRepository.php
-│   │   └── WalletRepository.php
+│   │   ├── WalletRepository.php
+│   │   └── WalletTypeRepository.php
 │   └── Services/               # Business logic
 │       ├── AttachmentService.php
 │       ├── AuditLogger.php
@@ -60,8 +62,10 @@ khfinam/
 │   └── reminder_email.php      # Sends reminder emails
 ├── database/
 │   ├── migrations/
-│   │   ├── 001_initial_schema.sql
-│   │   └── 002_features.sql
+│   │   ├── 001_initial_schema.sql   # Base schema (+ wallet_types / transfer-capable transactions in current tree)
+│   │   ├── 002_features.sql         # is_internal_transfer, transfer_group, indexes
+│   │   ├── 003_wallet_account_types.sql  # One-time upgrade: legacy wallet_type enum → wallet_types + wallet_type_id
+│   │   └── 004_transaction_transfer_type.sql  # One-time upgrade: type includes transfer + from_wallet_id / to_wallet_id
 │   ├── seeders/
 │   │   └── 002_demo_seed.sql
 │   └── tools/
@@ -76,7 +80,7 @@ khfinam/
 ├── resources/views/
 │   ├── layouts/                # admin.php, mobile.php, guest.php
 │   ├── auth/                   # login.php, forgot.php, reset.php
-│   ├── admin/                  # dashboard, users, transactions, categories, rates, audit, backups, reports, recurring, settings, notifications
+│   ├── admin/                  # dashboard, users, transactions, categories, rates, wallets, wallet_types, audit, backups, reports, recurring, settings, notifications
 │   └── mobile/                 # dashboard, add, wallets, stats, recurring, recurring_new, notifications, profile, transaction_show
 ├── routes/web.php              # Full route table (returned array)
 ├── storage/backups/            # mysqldump output files
@@ -109,6 +113,10 @@ Routes are defined in `routes/web.php` as `"METHOD /path" => [ControllerClass::c
 ### Database access
 
 All SQL is in **Repositories** using `Database::pdo()` (singleton PDO). Always use prepared statements with named or positional placeholders. Never build raw SQL with user input.
+
+**Ledger rows:** `transactions.type` is `income`, `expense`, or **`transfer`**. Transfers move value between wallets (`from_wallet_id` → `to_wallet_id`) without affecting income/expense KPI aggregates. Older data may still use paired rows with `is_internal_transfer = 1` instead of native `transfer` rows.
+
+**Wallet metadata:** reusable types live in **`wallet_types`**; each **`wallets`** row references `wallet_type_id`.
 
 ### Views
 
@@ -162,6 +170,10 @@ mysql -u root -p -e "CREATE DATABASE khfinam CHARACTER SET utf8mb4 COLLATE utf8m
 mysql -u root -p khfinam < database/migrations/001_initial_schema.sql
 mysql -u root -p khfinam < database/seeders/002_demo_seed.sql
 mysql -u root -p khfinam < database/migrations/002_features.sql
+
+# Existing databases only (skip on a brand‑new DB from the current 001 — see README / INSTALLATION):
+# mysql -u root -p khfinam < database/migrations/003_wallet_account_types.sql
+# mysql -u root -p khfinam < database/migrations/004_transaction_transfer_type.sql
 
 # 5. (Optional) Generate bulk sample data
 php database/tools/bulk_transaction_seed.php

@@ -19,6 +19,8 @@ use App\Services\BackupService;
 use App\Services\DatabaseRestoreService;
 use App\Services\MailService;
 use App\Services\RecurringService;
+use App\Services\WalletService;
+use App\Repositories\WalletTypeRepository;
 use PDO;
 
 final class AdminFormController
@@ -421,6 +423,169 @@ final class AdminFormController
             Session::flash('error', $e->getMessage());
         }
         Response::redirect(Url::to('/admin/backups'));
+    }
+
+    public function walletStore(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        $targetUser = (int) (Request::post()['user_id'] ?? 0);
+        if ($targetUser <= 0) {
+            Session::flash('error', 'Select a user.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        try {
+            (new WalletService())->createWallet($targetUser, [
+                'name' => trim((string) (Request::post()['name'] ?? '')),
+                'wallet_type_id' => (int) (Request::post()['wallet_type_id'] ?? 0),
+                'currency_id' => (int) (Request::post()['currency_id'] ?? 0),
+                'opening_balance' => (float) (Request::post()['opening_balance'] ?? 0),
+                'min_balance_threshold' => Request::post()['min_balance_threshold'] ?? '',
+                'is_default' => ! empty(Request::post()['is_default']),
+                'is_active' => ! empty(Request::post()['is_active']),
+                'notes' => trim((string) (Request::post()['notes'] ?? '')),
+                'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
+            ], true);
+            AuditLogger::log('wallet_create_admin', Auth::id(), 'user', (string) $targetUser);
+            Session::flash('message', 'Wallet created.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $targetUser])));
+    }
+
+    public function walletUpdate(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        $owner = (int) (Request::post()['wallet_user_id'] ?? 0);
+        $wid = (int) (Request::post()['wallet_id'] ?? 0);
+        if ($owner <= 0 || $wid <= 0) {
+            Session::flash('error', 'Invalid wallet.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        try {
+            (new WalletService())->updateWalletForOwner($owner, $wid, [
+                'name' => trim((string) (Request::post()['name'] ?? '')),
+                'wallet_type_id' => (int) (Request::post()['wallet_type_id'] ?? 0),
+                'currency_id' => (int) (Request::post()['currency_id'] ?? 0),
+                'opening_balance' => (float) (Request::post()['opening_balance'] ?? 0),
+                'min_balance_threshold' => Request::post()['min_balance_threshold'] ?? '',
+                'is_default' => ! empty(Request::post()['is_default']),
+                'is_active' => ! empty(Request::post()['is_active']),
+                'notes' => trim((string) (Request::post()['notes'] ?? '')),
+                'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
+            ], true);
+            AuditLogger::log('wallet_update_admin', Auth::id(), 'wallet', (string) $wid);
+            Session::flash('message', 'Wallet saved.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $owner])));
+    }
+
+    public function walletDelete(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        $owner = (int) (Request::post()['wallet_user_id'] ?? 0);
+        $wid = (int) (Request::post()['wallet_id'] ?? 0);
+        try {
+            (new WalletService())->deleteWalletForOwner($owner, $wid);
+            AuditLogger::log('wallet_delete_admin', Auth::id(), 'wallet', (string) $wid);
+            Session::flash('message', 'Wallet removed (no ledger history was attached).');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $owner > 0 ? $owner : null])));
+    }
+
+    public function walletTypeStore(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $slug = strtolower(trim((string) (Request::post()['slug'] ?? '')));
+        $label = trim((string) (Request::post()['label'] ?? ''));
+        if ($label === '' || ! preg_match('/^[a-z0-9_]{1,64}$/', $slug)) {
+            Session::flash('error', 'Label and lowercase slug (letters, digits, underscores) required.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        if ((new WalletTypeRepository())->findBySlug($slug) !== null) {
+            Session::flash('error', 'Slug already exists.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        try {
+            (new WalletTypeRepository())->create([
+                'slug' => $slug,
+                'label' => $label,
+                'icon' => trim((string) (Request::post()['icon'] ?? 'wallet')) ?: 'wallet',
+                'sort_order' => (int) (Request::post()['sort_order'] ?? 50),
+                'is_active' => ! empty(Request::post()['is_active']),
+                'is_system' => false,
+            ]);
+            AuditLogger::log('wallet_type_create', Auth::id(), 'wallet_type', $slug);
+            Session::flash('message', 'Wallet type added.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallet-types'));
+    }
+
+    public function walletTypeUpdate(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $id = (int) (Request::post()['type_id'] ?? 0);
+        if ($id <= 0) {
+            Session::flash('error', 'Invalid type.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        try {
+            (new WalletTypeRepository())->update($id, [
+                'label' => trim((string) (Request::post()['label'] ?? '')),
+                'icon' => trim((string) (Request::post()['icon'] ?? 'wallet')) ?: 'wallet',
+                'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
+                'is_active' => ! empty(Request::post()['is_active']),
+            ]);
+            AuditLogger::log('wallet_type_update', Auth::id(), 'wallet_type', (string) $id);
+            Session::flash('message', 'Wallet type updated.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallet-types'));
+    }
+
+    public function walletTypeDelete(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $id = (int) (Request::post()['type_id'] ?? 0);
+        try {
+            (new WalletTypeRepository())->deleteCustom($id);
+            AuditLogger::log('wallet_type_delete', Auth::id(), 'wallet_type', (string) $id);
+            Session::flash('message', 'Wallet type removed.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        Response::redirect(Url::to('/admin/wallet-types'));
     }
 
     private function guard(): void

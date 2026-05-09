@@ -16,6 +16,7 @@ use App\Repositories\CategoryRepository;
 use App\Repositories\CurrencyRepository;
 use App\Repositories\TransactionRepository;
 use App\Repositories\WalletRepository;
+use App\Repositories\WalletTypeRepository;
 use App\Services\TransactionService;
 use App\Services\WalletService;
 
@@ -79,13 +80,21 @@ final class MobileAppController
             return;
         }
         $uid = (int) Auth::id();
+        $oldRaw = Session::getFlash('old_tx');
+        $oldTx = null;
+        if (is_string($oldRaw)) {
+            $d = json_decode($oldRaw, true);
+            $oldTx = is_array($d) ? $d : null;
+        }
+
         View::renderLayout('mobile', 'mobile/add', [
             'title' => 'Add transaction',
             'user' => Auth::user(),
-            'wallets' => (new WalletRepository())->forUser($uid),
+            'wallets' => (new WalletRepository())->forUser($uid, true),
             'categoriesIncome' => (new CategoryRepository())->forUserIncludingGlobal($uid, 'income'),
             'categoriesExpense' => (new CategoryRepository())->forUserIncludingGlobal($uid, 'expense'),
             'error' => Session::getFlash('error'),
+            'oldTx' => $oldTx,
         ]);
     }
 
@@ -99,20 +108,34 @@ final class MobileAppController
             $svc = new TransactionService();
             $tagsRaw = trim((string) (Request::post()['tags'] ?? ''));
             $tags = $tagsRaw !== '' ? array_filter(array_map('trim', explode(',', $tagsRaw))) : [];
-            $id = $svc->createForUser((int) Auth::id(), [
-                'type' => (string) (Request::post()['type'] ?? 'expense'),
-                'title' => trim((string) (Request::post()['title'] ?? '')),
-                'amount' => (float) (Request::post()['amount'] ?? 0),
-                'wallet_id' => (int) (Request::post()['wallet_id'] ?? 0),
-                'category_id' => (int) (Request::post()['category_id'] ?? 0),
-                'transaction_date' => (string) (Request::post()['transaction_date'] ?? date('Y-m-d')),
-                'notes' => trim((string) (Request::post()['notes'] ?? '')),
-                'is_consolidated_parent' => ! empty(Request::post()['is_consolidated_parent']),
-                'tags' => $tags,
-            ]);
+            $typeIn = strtolower(trim((string) (Request::post()['type'] ?? 'expense')));
+            if ($typeIn === 'transfer') {
+                $svc->createTransferForUser((int) Auth::id(), [
+                    'title' => trim((string) (Request::post()['title'] ?? '')),
+                    'amount' => (float) (Request::post()['amount'] ?? 0),
+                    'from_wallet_id' => (int) (Request::post()['from_wallet_id'] ?? 0),
+                    'to_wallet_id' => (int) (Request::post()['to_wallet_id'] ?? 0),
+                    'transaction_date' => (string) (Request::post()['transaction_date'] ?? date('Y-m-d')),
+                    'notes' => trim((string) (Request::post()['notes'] ?? '')),
+                    'tags' => $tags,
+                ]);
+            } else {
+                $svc->createForUser((int) Auth::id(), [
+                    'type' => (string) (Request::post()['type'] ?? 'expense'),
+                    'title' => trim((string) (Request::post()['title'] ?? '')),
+                    'amount' => (float) (Request::post()['amount'] ?? 0),
+                    'wallet_id' => (int) (Request::post()['wallet_id'] ?? 0),
+                    'category_id' => (int) (Request::post()['category_id'] ?? 0),
+                    'transaction_date' => (string) (Request::post()['transaction_date'] ?? date('Y-m-d')),
+                    'notes' => trim((string) (Request::post()['notes'] ?? '')),
+                    'is_consolidated_parent' => ! empty(Request::post()['is_consolidated_parent']),
+                    'tags' => $tags,
+                ]);
+            }
             Response::redirect(Url::to('/app'));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
+            Session::flash('old_tx', json_encode(Request::post() ?: []));
             Response::redirect(Url::to('/app/add'));
         }
     }
@@ -137,7 +160,7 @@ final class MobileAppController
     {
         $this->requireUser();
         $uid = (int) Auth::id();
-        $wallets = (new WalletRepository())->forUser($uid);
+        $wallets = (new WalletRepository())->forUser($uid, false);
         $balances = (new WalletService())->walletBalancesForUser($uid);
         $map = [];
         foreach ($balances as $b) {
@@ -148,6 +171,7 @@ final class MobileAppController
             'wallets' => $wallets,
             'balances' => $map,
             'currencies' => (new CurrencyRepository())->allActive(),
+            'walletTypes' => (new WalletTypeRepository())->allOrdered(true),
             'message' => Session::getFlash('message'),
             'error' => Session::getFlash('error'),
             'user' => Auth::user(),

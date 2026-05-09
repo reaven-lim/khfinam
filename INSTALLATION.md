@@ -5,7 +5,7 @@
 1. Install XAMPP with Apache + MySQL + PHP 8.2+.
 2. Place the project under `htdocs/khfinam`.
 3. `composer install` in the project root.
-4. Create DB and import SQL (see README).
+4. Create DB and import SQL in order: `001_initial_schema.sql` → `002_demo_seed.sql` → `002_features.sql` (exact paths in README **Quick start**). For an **existing** database that predates customizable wallet types, run **`database/migrations/003_wallet_account_types.sql` once** (see README upgrade note); skip `003` on a brand-new DB created from the current `001`. If the DB predates **native transfer** rows, run **`database/migrations/004_transaction_transfer_type.sql` once** (see README); skip `004` when the current `001` already created `from_wallet_id` / `to_wallet_id`.
 5. Copy `.env.example` to `.env`.
 
 ### URL options (choose one)
@@ -56,13 +56,13 @@ C:\xampp\php\php.exe cron\reminder_email.php
 
 ## AMPPS / macOS
 
-Same as XAMPP: document root → `public/`, Composer install, MySQL import, `.env`.
+Same as XAMPP: document root → `public/`, Composer install, MySQL import in README order (and **`003` only** for legacy wallet schema upgrades), `.env`.
 
 ## cPanel shared hosting
 
 1. Upload files (excluding `node_modules` if any; this project does not require Node).
 2. In cPanel **MySQL® Databases**, create database and user; assign all privileges.
-3. **phpMyAdmin** → Import `001_initial_schema.sql` then `002_demo_seed.sql`.
+3. **phpMyAdmin** → Import in order: `database/migrations/001_initial_schema.sql`, then `database/seeders/002_demo_seed.sql`, then `database/migrations/002_features.sql`. If you are upgrading an old install that still uses the `wallets.wallet_type` enum, import **`database/migrations/003_wallet_account_types.sql`** once (not needed for a new DB created from the current `001`).
 4. Edit `.env` with remote DB credentials and `APP_URL` (https recommended).
 5. In **Domains**, map the domain or subdomain to `public/` (some hosts call this “document root” under **Domains** → **Manage**).
 6. Ensure PHP version ≥ 8.2 and enable extensions listed in README.
@@ -92,6 +92,18 @@ SESSION_SECURE_COOKIE=true
 
 - `storage/backups/`, `logs/`, `public/uploads/` must be writable by the web server user.
 - Never expose `app/`, `config/`, `.env` via the web server (document root must be `public/` only).
+
+## Database migrations (summary)
+
+| File | When |
+|------|------|
+| `database/migrations/001_initial_schema.sql` | New database (base schema, includes `wallet_types` and `wallets.wallet_type_id` in current tree) |
+| `database/seeders/002_demo_seed.sql` | After `001` (demo users, categories, sample wallets) |
+| `database/migrations/002_features.sql` | After seed (extra feature flags / columns) |
+| `database/migrations/003_wallet_account_types.sql` | **One-time upgrade only** if `wallets` still has legacy `wallet_type` enum and no `wallet_type_id` FK flow |
+| `database/migrations/004_transaction_transfer_type.sql` | **One-time upgrade** if `transactions` lacks `transfer` in `type` enum or `from_wallet_id` / `to_wallet_id` (skip when the current `001` was applied fresh) |
+
+Super admin URLs for wallet management: `/admin/wallets` (per-user wallets), `/admin/wallet-types` (Bank, E-wallet, Cash, etc.).
 
 ## SMTP
 

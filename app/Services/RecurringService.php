@@ -147,8 +147,8 @@ final class RecurringService
         $date = (string) $r['next_occurrence'];
 
         $pdo->prepare(
-            'INSERT INTO transactions (user_id, wallet_id, category_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, transaction_date, created_by, recurring_schedule_id, is_consolidated_parent, is_internal_transfer, transfer_group)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,0,NULL)'
+            'INSERT INTO transactions (user_id, wallet_id, from_wallet_id, to_wallet_id, category_id, parent_transaction_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, notes, transaction_date, created_by, recurring_schedule_id, is_consolidated_parent, is_internal_transfer, transfer_group)
+             VALUES (?,?,NULL,NULL,?,NULL,?,?,?,?,?,NULL,?,?,?,?,0,0,NULL)'
         )->execute([
             $uid,
             $walletId,

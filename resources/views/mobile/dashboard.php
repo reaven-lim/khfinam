@@ -187,7 +187,7 @@ $getCatIcon = function (string $name) use ($catIconMap): string {
     </div>
     <div class="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-none">
         <?php foreach ($wallets as $w):
-            $wType = (string) ($w['wallet_type'] ?? 'other');
+            $wType = (string) ($w['type_slug'] ?? 'other');
             $wCfg  = $walletConfig[$wType] ?? $walletConfig['other'];
         ?>
         <a href="<?= Str::e(Url::to('/app/wallets')) ?>"
@@ -266,23 +266,24 @@ $getCatIcon = function (string $name) use ($catIconMap): string {
     <?php else: ?>
     <ul class="space-y-2">
         <?php foreach (array_slice($recent, 0, 10) as $r):
-            $isIncome = ($r['type'] ?? '') === 'income';
+            $isTf = ($r['type'] ?? '') === 'transfer';
+            $isIncome = ! $isTf && ($r['type'] ?? '') === 'income';
             $catName  = mb_strtolower((string) ($r['category_name'] ?? ''));
-            $icon     = $getCatIcon($catName);
+            $icon     = $isTf ? 'arrow-right-left' : $getCatIcon($catName);
         ?>
         <li>
             <details class="group rounded-xl border border-slate-200/60 dark:border-slate-800 bg-white dark:bg-[#0d1424] shadow-sm overflow-hidden">
                 <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer select-none list-none">
-                    <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 <?= $isIncome ? 'bg-emerald-50 dark:bg-emerald-950/50' : 'bg-rose-50 dark:bg-rose-950/50' ?>">
-                        <i data-lucide="<?= $icon ?>" class="w-4 h-4 <?= $isIncome ? 'text-emerald-600' : 'text-rose-500' ?>"></i>
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 <?= $isTf ? 'bg-cyan-50 dark:bg-cyan-950/40' : ($isIncome ? 'bg-emerald-50 dark:bg-emerald-950/50' : 'bg-rose-50 dark:bg-rose-950/50') ?>">
+                        <i data-lucide="<?= Str::e($icon) ?>" class="w-4 h-4 <?= $isTf ? 'text-cyan-600 dark:text-cyan-400' : ($isIncome ? 'text-emerald-600' : 'text-rose-500') ?>"></i>
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate"><?= Str::e((string) $r['title']) ?></p>
                         <p class="text-[10px] text-slate-400 font-medium"><?= Str::e((string) $r['category_name']) ?> · <?= Str::e((string) $r['transaction_date']) ?></p>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                        <span class="text-sm font-extrabold <?= $isIncome ? 'text-emerald-600' : 'text-rose-600' ?>">
-                            <?= $isIncome ? '+' : '−' ?>RM <?= number_format((float) $r['amount'], 2) ?>
+                        <span class="text-sm font-extrabold <?= $isTf ? 'text-slate-700 dark:text-slate-200 tabular-nums' : ($isIncome ? 'text-emerald-600' : 'text-rose-600') ?>">
+                            <?php if (! $isTf): ?><?= $isIncome ? '+' : '−' ?><?php endif; ?>RM <?= number_format((float) $r['amount'], 2) ?>
                         </span>
                         <i data-lucide="chevron-down" class="chevron-icon w-3.5 h-3.5 text-slate-400 shrink-0"></i>
                     </div>

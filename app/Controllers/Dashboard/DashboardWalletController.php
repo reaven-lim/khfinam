@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controllers\Mobile;
+namespace App\Controllers\Dashboard;
 
 use App\Core\Csrf;
 use App\Core\Request;
@@ -13,40 +13,41 @@ use App\Helpers\Config;
 use App\Helpers\Url;
 use App\Services\WalletService;
 
-final class WalletActionController
+final class DashboardWalletController
 {
-    public function create(): void
+    public function store(): void
     {
-        $this->requireUser();
+        $this->guard();
         if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
             Session::flash('error', 'Invalid session.');
-            Response::redirect(Url::to('/app/wallets'));
+            Response::redirect(Url::to('/dashboard/wallets'));
         }
+        $uid = (int) Auth::id();
         try {
-            (new WalletService())->createWallet((int) Auth::id(), [
+            (new WalletService())->createWallet($uid, [
                 'name' => trim((string) (Request::post()['name'] ?? '')),
                 'wallet_type_id' => (int) (Request::post()['wallet_type_id'] ?? 0),
                 'currency_id' => (int) (Request::post()['currency_id'] ?? 0),
                 'opening_balance' => (float) (Request::post()['opening_balance'] ?? 0),
                 'min_balance_threshold' => Request::post()['min_balance_threshold'] ?? '',
                 'is_default' => ! empty(Request::post()['is_default']),
-                'is_active' => array_key_exists('is_active', Request::post()) ? ! empty(Request::post()['is_active']) : true,
+                'is_active' => ! empty(Request::post()['is_active']),
                 'notes' => trim((string) (Request::post()['notes'] ?? '')),
                 'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
             ]);
-            Response::redirect(Url::to('/app/wallets'));
+            Session::flash('message', 'Wallet created.');
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
-            Response::redirect(Url::to('/app/wallets'));
         }
+        Response::redirect(Url::to('/dashboard/wallets'));
     }
 
     public function update(): void
     {
-        $this->requireUser();
+        $this->guard();
         if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
             Session::flash('error', 'Invalid session.');
-            Response::redirect(Url::to('/app/wallets'));
+            Response::redirect(Url::to('/dashboard/wallets'));
         }
         $uid = (int) Auth::id();
         $wid = (int) (Request::post()['wallet_id'] ?? 0);
@@ -62,64 +63,36 @@ final class WalletActionController
                 'notes' => trim((string) (Request::post()['notes'] ?? '')),
                 'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
             ]);
-            Session::flash('message', 'Wallet updated.');
-            Response::redirect(Url::to('/app/wallets'));
+            Session::flash('message', 'Wallet saved.');
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
-            Response::redirect(Url::to('/app/wallets'));
         }
+        Response::redirect(Url::to('/dashboard/wallets'));
     }
 
     public function delete(): void
     {
-        $this->requireUser();
+        $this->guard();
         if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
             Session::flash('error', 'Invalid session.');
-            Response::redirect(Url::to('/app/wallets'));
+            Response::redirect(Url::to('/dashboard/wallets'));
         }
         $uid = (int) Auth::id();
         $wid = (int) (Request::post()['wallet_id'] ?? 0);
         try {
             (new WalletService())->deleteWalletForOwner($uid, $wid);
             Session::flash('message', 'Wallet deleted.');
-            Response::redirect(Url::to('/app/wallets'));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
-            Response::redirect(Url::to('/app/wallets'));
         }
+        Response::redirect(Url::to('/dashboard/wallets'));
     }
 
-    public function transfer(): void
-    {
-        $this->requireUser();
-        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
-            Session::flash('error', 'Invalid session.');
-            Response::redirect(Url::to('/app/wallets'));
-        }
-        try {
-            (new WalletService())->transfer(
-                (int) Auth::id(),
-                (int) (Request::post()['from_wallet_id'] ?? 0),
-                (int) (Request::post()['to_wallet_id'] ?? 0),
-                (float) (Request::post()['amount'] ?? 0),
-                (string) (Request::post()['transfer_date'] ?? date('Y-m-d')),
-                trim((string) (Request::post()['notes'] ?? '')) ?: null
-            );
-            Session::flash('message', 'Transfer recorded.');
-            Response::redirect(Url::to('/app/wallets'));
-        } catch (\Throwable $e) {
-            Session::flash('error', $e->getMessage());
-            Response::redirect(Url::to('/app/wallets'));
-        }
-    }
-
-    private function requireUser(): void
+    private function guard(): void
     {
         if (! Auth::check()) {
             Response::redirect(Url::to('/login'));
-        }
-        if (Auth::isSuperAdmin()) {
-            Response::redirect(Url::to('/admin'));
+            exit;
         }
     }
 }

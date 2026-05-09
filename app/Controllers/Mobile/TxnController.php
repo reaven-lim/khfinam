@@ -46,7 +46,7 @@ final class TxnController
         $att->execute([$tid]);
         $attachments = $att->fetchAll(\PDO::FETCH_ASSOC);
 
-        $wallets = (new WalletRepository())->forUser($uid);
+        $wallets = (new WalletRepository())->forUser($uid, false);
         $cr = new CategoryRepository();
         View::renderLayout('mobile', 'mobile/transaction_show', [
             'title' => $tx['title'],
@@ -75,6 +75,8 @@ final class TxnController
                 'amount' => (float) (Request::post()['amount'] ?? 0),
                 'wallet_id' => (int) (Request::post()['wallet_id'] ?? 0),
                 'category_id' => (int) (Request::post()['category_id'] ?? 0),
+                'from_wallet_id' => (int) (Request::post()['from_wallet_id'] ?? 0),
+                'to_wallet_id' => (int) (Request::post()['to_wallet_id'] ?? 0),
                 'transaction_date' => Request::post()['transaction_date'] ?? '',
                 'type' => Request::post()['type'] ?? '',
                 'notes' => Request::post()['notes'] ?? '',

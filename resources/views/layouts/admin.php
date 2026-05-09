@@ -23,6 +23,8 @@ $navGroups = [
     ],
     'Management' => [
         '/admin/users'         => ['Users',         'users'],
+        '/admin/wallets'       => ['Wallets',       'wallet'],
+        '/admin/wallet-types'  => ['Wallet types',  'layers'],
         '/admin/categories'    => ['Categories',    'tag'],
         '/admin/rates'         => ['Rates',         'percent'],
         '/admin/recurring'     => ['Recurring',     'repeat-2'],

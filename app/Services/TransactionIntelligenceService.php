@@ -42,13 +42,12 @@ final class TransactionIntelligenceService
         $pdo = Database::pdo();
         $needUsername = $scopedUserId === 0;
 
-        $sql = 'SELECT t.*, w.name AS wallet_name, c.name AS category_name';
+        [$ls, $lj] = TransactionRepository::listingSelectFragments();
+        $sql = 'SELECT ' . $ls;
         if ($needUsername) {
             $sql .= ', u.username';
         }
-        $sql .= ' FROM transactions t
-            JOIN wallets w ON w.id = t.wallet_id
-            JOIN categories c ON c.id = t.category_id';
+        $sql .= $lj;
         if ($needUsername) {
             $sql .= ' JOIN users u ON u.id = t.user_id';
         }
@@ -67,7 +66,7 @@ final class TransactionIntelligenceService
             $sql .= ' AND t.transaction_date <= ?';
             $params[] = $to;
         }
-        if ($type === 'income' || $type === 'expense') {
+        if ($type === 'income' || $type === 'expense' || $type === 'transfer') {
             $sql .= ' AND t.type = ?';
             $params[] = $type;
         }

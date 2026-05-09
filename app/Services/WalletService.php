@@ -6,18 +6,20 @@ namespace App\Services;
 
 use App\Core\Database;
 use App\Repositories\WalletRepository;
+use App\Repositories\WalletTypeRepository;
 
 final class WalletService
 {
     public function __construct(
-        private readonly WalletRepository $wallets = new WalletRepository()
+        private readonly WalletRepository $wallets = new WalletRepository(),
+        private readonly WalletTypeRepository $walletTypes = new WalletTypeRepository()
     ) {
     }
 
     /**
-     * Transfer between two wallets (same user). Creates paired internal transactions.
+     * Transfer between two wallets (same user). Inserts one `transfer` row (excluded from income and expense totals).
      *
-     * @return array{0: int, 1: int} Both transaction IDs
+     * @return array{0: int, 1: int} Duplicate ids for callers that historically expected paired rows
      */
     public function transfer(int $userId, int $fromWalletId, int $toWalletId, float $amount, string $date, ?string $notes = null): array
     {
@@ -28,125 +30,139 @@ final class WalletService
             throw new \InvalidArgumentException('Amount must be positive.');
         }
         $pdo = Database::pdo();
-        $pdo->beginTransaction();
-        try {
-            $g = $this->randomUuid();
-
-            $catOut = $this->categoryIdBySlug($pdo, 'transfer-out', $userId);
-            $catIn = $this->categoryIdBySlug($pdo, 'transfer-in', $userId);
-
-            $wFrom = $this->requireWallet($pdo, $fromWalletId, $userId);
-            $wTo = $this->requireWallet($pdo, $toWalletId, $userId);
-            if ((int) $wFrom['currency_id'] !== (int) $wTo['currency_id']) {
-                throw new \InvalidArgumentException('Transfers require both wallets to use the same currency (or convert separately).');
-            }
-
-            $cid = (int) $wFrom['currency_id'];
-            $rateFrom = $this->effectiveRate($pdo, $cid);
-            $rateTo = $rateFrom;
-            $baseFrom = round($amount * $rateFrom, 4);
-            $baseTo = $baseFrom;
-
-            $tid1 = $this->insertTx(
-                $pdo,
-                $userId,
-                $fromWalletId,
-                $catOut,
-                'expense',
-                'Transfer to ' . $wTo['name'],
-                $amount,
-                $baseFrom,
-                $cid,
-                $rateFrom,
-                $date,
-                $notes,
-                1,
-                $g
-            );
-            $tid2 = $this->insertTx(
-                $pdo,
-                $userId,
-                $toWalletId,
-                $catIn,
-                'income',
-                'Transfer from ' . $wFrom['name'],
-                $amount,
-                $baseTo,
-                $cid,
-                $rateTo,
-                $date,
-                $notes,
-                1,
-                $g
-            );
-
-            $pdo->commit();
-
-            AuditLogger::log('wallet_transfer', $userId, 'transaction', (string) $tid1, ['to_tx' => $tid2, 'group' => $g]);
-
-            return [$tid1, $tid2];
-        } catch (\Throwable $e) {
-            $pdo->rollBack();
-            throw $e;
+        $wFrom = $this->requireWallet($pdo, $fromWalletId, $userId);
+        $wTo = $this->requireWallet($pdo, $toWalletId, $userId);
+        if ((int) $wFrom['currency_id'] !== (int) $wTo['currency_id']) {
+            throw new \InvalidArgumentException('Transfers require both wallets to use the same currency (or convert separately).');
         }
+        $title = 'Transfer · ' . $wFrom['name'] . ' → ' . $wTo['name'];
+        $id = (new TransactionService())->createTransferForUser($userId, [
+            'title' => $title,
+            'amount' => $amount,
+            'from_wallet_id' => $fromWalletId,
+            'to_wallet_id' => $toWalletId,
+            'transaction_date' => $date,
+            'notes' => $notes,
+            'tags' => [],
+        ]);
+
+        return [$id, $id];
     }
 
-    /** @param array<string, mixed> $data */
-    public function createWallet(int $userId, array $data): int
+    /**
+     * @param array<string, mixed> $data expects wallet_type_id (preferred) or legacy wallet_type slug
+     */
+    public function createWallet(int $ownerUserId, array $data, bool $allowInactiveWalletType = false): int
     {
+        if (trim((string) ($data['name'] ?? '')) === '') {
+            throw new \InvalidArgumentException('Wallet name is required.');
+        }
+        $typeId = $this->resolveWalletTypeId($data, ! $allowInactiveWalletType);
         $pdo = Database::pdo();
         $stmt = $pdo->prepare(
-            'INSERT INTO wallets (user_id, name, wallet_type, currency_id, opening_balance, min_balance_threshold, is_default, is_active, notes, sort_order)
+            'INSERT INTO wallets (user_id, name, wallet_type_id, currency_id, opening_balance, min_balance_threshold, is_default, is_active, notes, sort_order)
              VALUES (?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
-            $userId,
-            $data['name'],
-            $data['wallet_type'] ?? 'cash',
+            $ownerUserId,
+            trim((string) $data['name']),
+            $typeId,
             (int) $data['currency_id'],
             (float) ($data['opening_balance'] ?? 0),
             isset($data['min_balance_threshold']) && $data['min_balance_threshold'] !== '' ? (float) $data['min_balance_threshold'] : null,
             ! empty($data['is_default']) ? 1 : 0,
             isset($data['is_active']) ? (int) ! empty($data['is_active']) : 1,
-            $data['notes'] ?? null,
+            isset($data['notes']) ? trim((string) $data['notes']) ?: null : null,
             (int) ($data['sort_order'] ?? 0),
         ]);
         $id = (int) $pdo->lastInsertId();
         if (! empty($data['is_default'])) {
-            $pdo->prepare('UPDATE wallets SET is_default = 0 WHERE user_id = ? AND id <> ?')->execute([$userId, $id]);
+            $pdo->prepare('UPDATE wallets SET is_default = 0 WHERE user_id = ? AND id <> ?')->execute([$ownerUserId, $id]);
             $pdo->prepare('UPDATE wallets SET is_default = 1 WHERE id = ?')->execute([$id]);
         }
 
         return $id;
     }
 
-    /** @param array<string, mixed> $data */
-    public function updateWallet(int $userId, int $walletId, array $data): void
+    /**
+     * @param array<string, mixed> $data
+     */
+    public function updateWalletForOwner(int $ownerUserId, int $walletId, array $data, bool $allowInactiveWalletType = false): void
     {
         $pdo = Database::pdo();
         $chk = $pdo->prepare('SELECT id FROM wallets WHERE id = ? AND user_id = ? LIMIT 1');
-        $chk->execute([$walletId, $userId]);
+        $chk->execute([$walletId, $ownerUserId]);
         if (! $chk->fetchColumn()) {
             throw new \InvalidArgumentException('Wallet not found.');
         }
+        if (trim((string) ($data['name'] ?? '')) === '') {
+            throw new \InvalidArgumentException('Wallet name is required.');
+        }
+        $typeId = $this->resolveWalletTypeId($data, ! $allowInactiveWalletType);
         $pdo->prepare(
-            'UPDATE wallets SET name = ?, wallet_type = ?, currency_id = ?, opening_balance = ?, min_balance_threshold = ?, is_default = ?, is_active = ?, notes = ?, sort_order = ?, updated_at = NOW() WHERE id = ? AND user_id = ?'
+            'UPDATE wallets SET name = ?, wallet_type_id = ?, currency_id = ?, opening_balance = ?, min_balance_threshold = ?, is_default = ?, is_active = ?, notes = ?, sort_order = ?, updated_at = NOW() WHERE id = ? AND user_id = ?'
         )->execute([
-            $data['name'],
-            $data['wallet_type'] ?? 'cash',
+            trim((string) $data['name']),
+            $typeId,
             (int) $data['currency_id'],
             (float) ($data['opening_balance'] ?? 0),
             isset($data['min_balance_threshold']) && $data['min_balance_threshold'] !== '' ? (float) $data['min_balance_threshold'] : null,
             ! empty($data['is_default']) ? 1 : 0,
             isset($data['is_active']) ? (int) ! empty($data['is_active']) : 1,
-            $data['notes'] ?? null,
+            isset($data['notes']) ? trim((string) $data['notes']) ?: null : null,
             (int) ($data['sort_order'] ?? 0),
             $walletId,
-            $userId,
+            $ownerUserId,
         ]);
         if (! empty($data['is_default'])) {
-            $pdo->prepare('UPDATE wallets SET is_default = 0 WHERE user_id = ? AND id <> ?')->execute([$userId, $walletId]);
+            $pdo->prepare('UPDATE wallets SET is_default = 0 WHERE user_id = ? AND id <> ?')->execute([$ownerUserId, $walletId]);
         }
+    }
+
+    public function deactivateWalletForOwner(int $ownerUserId, int $walletId): void
+    {
+        $pdo = Database::pdo();
+        $pdo->prepare('UPDATE wallets SET is_active = 0, updated_at = NOW() WHERE id = ? AND user_id = ?')->execute([$walletId, $ownerUserId]);
+    }
+
+    /**
+     * Hard-delete only when no transactions and no recurring rules reference this wallet.
+     */
+    public function deleteWalletForOwner(int $ownerUserId, int $walletId): void
+    {
+        $repo = new WalletRepository();
+        if ($repo->findForOwner($walletId, $ownerUserId) === null) {
+            throw new \InvalidArgumentException('Wallet not found.');
+        }
+        if ($repo->countTransactions($walletId) > 0) {
+            throw new \InvalidArgumentException('Wallet has transactions; deactivate instead of delete.');
+        }
+        if ($repo->countRecurring($walletId) > 0) {
+            throw new \InvalidArgumentException('Wallet has recurring schedules; deactivate instead of delete.');
+        }
+        $pdo = Database::pdo();
+        $pdo->prepare('DELETE FROM wallets WHERE id = ? AND user_id = ?')->execute([$walletId, $ownerUserId]);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function resolveWalletTypeId(array $data, bool $requireActiveType = true): int
+    {
+        $tid = isset($data['wallet_type_id']) ? (int) $data['wallet_type_id'] : 0;
+        if ($tid > 0) {
+            $row = $this->walletTypes->findById($tid);
+            if ($row === null || ($requireActiveType && empty($row['is_active']))) {
+                throw new \InvalidArgumentException('Invalid or inactive wallet type.');
+            }
+
+            return $tid;
+        }
+        if (! empty($data['wallet_type'])) {
+            $row = $this->walletTypes->findBySlug((string) $data['wallet_type']);
+            if ($row !== null && (! $requireActiveType || ! empty($row['is_active']))) {
+                return (int) $row['id'];
+            }
+        }
+        throw new \InvalidArgumentException('Wallet type is required.');
     }
 
     /**
@@ -167,13 +183,16 @@ final class WalletService
 
             $q = $pdo->prepare(
                 "SELECT COALESCE(SUM(
-                    CASE WHEN type = 'income' THEN amount_base
-                         WHEN type = 'expense' THEN -amount_base
+                    CASE
+                         WHEN type = 'income' AND wallet_id = ? THEN amount_base
+                         WHEN type = 'expense' AND wallet_id = ? THEN -amount_base
+                         WHEN type = 'transfer' AND from_wallet_id = ? THEN -amount_base
+                         WHEN type = 'transfer' AND to_wallet_id = ? THEN amount_base
                          ELSE 0 END
                 ), 0) AS flow
-                FROM transactions WHERE wallet_id = ? AND user_id = ? AND deleted_at IS NULL"
+                FROM transactions WHERE user_id = ? AND deleted_at IS NULL"
             );
-            $q->execute([$wid, $userId]);
+            $q->execute([$wid, $wid, $wid, $wid, $userId]);
             $flow = (float) $q->fetchColumn();
             $balance = $openingBase + $flow;
 
@@ -192,21 +211,6 @@ final class WalletService
         return $out;
     }
 
-    private function randomUuid(): string
-    {
-        return sprintf(
-            '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-            random_int(0, 0xffff),
-            random_int(0, 0xffff),
-            random_int(0, 0xffff),
-            random_int(0, 0x0fff) | 0x4000,
-            random_int(0, 0x3fff) | 0x8000,
-            random_int(0, 0xffff),
-            random_int(0, 0xffff),
-            random_int(0, 0xffff)
-        );
-    }
-
     /** @return array<string, mixed> */
     private function requireWallet(\PDO $pdo, int $id, int $userId): array
     {
@@ -218,18 +222,6 @@ final class WalletService
         }
 
         return $w;
-    }
-
-    private function categoryIdBySlug(\PDO $pdo, string $slug, int $userId): int
-    {
-        $s = $pdo->prepare('SELECT id FROM categories WHERE slug = ? AND (user_id IS NULL OR user_id = ?) ORDER BY is_system DESC LIMIT 1');
-        $s->execute([$slug, $userId]);
-        $id = $s->fetchColumn();
-        if (! $id) {
-            throw new \RuntimeException('Transfer categories missing. Run migration 002.');
-        }
-
-        return (int) $id;
     }
 
     private function effectiveRate(\PDO $pdo, int $currencyId): float
@@ -245,45 +237,5 @@ final class WalletService
         $row = $r->fetch(\PDO::FETCH_ASSOC);
 
         return $row ? (float) $row['rate'] : 1.0;
-    }
-
-    private function insertTx(
-        \PDO $pdo,
-        int $userId,
-        int $walletId,
-        int $categoryId,
-        string $type,
-        string $title,
-        float $amount,
-        float $amountBase,
-        int $currencyId,
-        float $rate,
-        string $date,
-        ?string $notes,
-        int $isInternal,
-        string $group
-    ): int {
-        $stmt = $pdo->prepare(
-            'INSERT INTO transactions (user_id, wallet_id, category_id, type, title, amount, amount_base, currency_id, exchange_rate_to_base, notes, transaction_date, created_by, is_consolidated_parent, is_internal_transfer, transfer_group)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)'
-        );
-        $stmt->execute([
-            $userId,
-            $walletId,
-            $categoryId,
-            $type,
-            $title,
-            $amount,
-            $amountBase,
-            $currencyId,
-            $rate,
-            $notes,
-            $date,
-            $userId,
-            $isInternal,
-            $group,
-        ]);
-
-        return (int) $pdo->lastInsertId();
     }
 }

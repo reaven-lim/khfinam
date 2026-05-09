@@ -25,12 +25,16 @@ INSERT INTO `categories` (`id`, `user_id`, `parent_id`, `name`, `slug`, `type`, 
 (6, NULL, NULL, 'Shopping', 'shopping', 'expense', '#db2777', 'shopping_bag', 1, 6),
 (7, NULL, NULL, 'Side income', 'side-income', 'income', '#0891b2', 'savings', 1, 10);
 
-INSERT INTO `wallets` (`user_id`, `name`, `wallet_type`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
-SELECT u.id, 'Cash', 'cash', 1, 200.0000, 50.0000, 1, 1, 'Petty cash', 0 FROM users u WHERE u.username = 'demo' LIMIT 1;
-INSERT INTO `wallets` (`user_id`, `name`, `wallet_type`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
-SELECT u.id, 'Maybank', 'bank', 1, 5000.0000, 500.0000, 0, 1, 'Main account', 1 FROM users u WHERE u.username = 'demo' LIMIT 1;
-INSERT INTO `wallets` (`user_id`, `name`, `wallet_type`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
-SELECT u.id, 'Admin Wallet', 'cash', 1, 0.0000, NULL, 1, 1, NULL, 0 FROM users u WHERE u.username = 'superadmin' LIMIT 1;
+INSERT INTO `wallets` (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
+SELECT u.id, 'Cash', (SELECT id FROM wallet_types WHERE slug = 'cash' LIMIT 1), 1, 200.0000, 50.0000, 1, 1, 'Petty cash', 0 FROM users u WHERE u.username = 'demo' LIMIT 1;
+INSERT INTO `wallets` (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
+SELECT u.id, 'Maybank', (SELECT id FROM wallet_types WHERE slug = 'bank' LIMIT 1), 1, 5000.0000, 500.0000, 0, 1, 'Main account', 1 FROM users u WHERE u.username = 'demo' LIMIT 1;
+INSERT INTO `wallets` (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
+SELECT u.id, 'Touch n Go eWallet', (SELECT id FROM wallet_types WHERE slug = 'ewallet' LIMIT 1), 1, 150.0000, NULL, 0, 1, 'TNG balance', 2 FROM users u WHERE u.username = 'demo' LIMIT 1;
+INSERT INTO `wallets` (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
+SELECT u.id, 'Credit Card', (SELECT id FROM wallet_types WHERE slug = 'credit_card' LIMIT 1), 1, 0.0000, NULL, 0, 1, 'Primary card', 3 FROM users u WHERE u.username = 'demo' LIMIT 1;
+INSERT INTO `wallets` (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `is_default`, `is_active`, `notes`, `sort_order`)
+SELECT u.id, 'Admin Wallet', (SELECT id FROM wallet_types WHERE slug = 'cash' LIMIT 1), 1, 0.0000, NULL, 1, 1, NULL, 0 FROM users u WHERE u.username = 'superadmin' LIMIT 1;
 
 INSERT INTO `transactions` (`user_id`, `wallet_id`, `category_id`, `parent_transaction_id`, `type`, `title`, `amount`, `amount_base`, `currency_id`, `exchange_rate_to_base`, `notes`, `transaction_date`, `deleted_at`, `created_by`, `recurring_schedule_id`, `is_consolidated_parent`)
 SELECT u.id, w.id, 3, NULL, 'expense', 'Groceries — weekly', 120.50, 120.5000, 1, 1.000000000000, 'Supermarket', DATE_SUB(CURDATE(), INTERVAL 2 DAY), NULL, u.id, NULL, 0
