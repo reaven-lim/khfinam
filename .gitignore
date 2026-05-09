@@ -1,0 +1,49 @@
+##############################################
+# KHFinaM — .gitignore
+##############################################
+
+# ----- Environment & secrets -----
+.env
+*.env
+!.env.example
+
+# ----- Composer / dependencies -----
+/vendor/
+
+# ----- User-uploaded files -----
+/public/uploads/*
+!/public/uploads/.htaccess
+
+# ----- Backup archives -----
+/storage/backups/*.sql
+/storage/backups/*.sql.gz
+/storage/backups/*.zip
+
+# ----- Runtime logs -----
+/logs/*.log
+/logs/*.txt
+
+# ----- PWA generated icons (regenerate via setup_icons.php if needed) -----
+# Keep them tracked so deployment doesn't need GD — comment out if preferred
+# /public/icon-192.png
+# /public/icon-512.png
+
+# ----- Editor & OS -----
+.history/
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ----- PHP / runtime temp -----
+*.cache
+*.tmp
+/tmp/
+
+# ----- Windows XAMPP specifics -----
+*.bak
+*.orig

@@ -1,0 +1,17 @@
+# Root .htaccess — forwards all requests into public/ transparently.
+# Lets you visit http://localhost/khfinam/ instead of http://localhost/khfinam/public/
+#
+# Requires: AllowOverride All (or FileInfo + Options) in httpd.conf / vhost.
+# The public/.htaccess already handles the front-controller rewrite inside public/.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If the request already targets a real file or directory, serve it directly.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Rewrite everything else to public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
