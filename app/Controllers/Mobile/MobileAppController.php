@@ -236,8 +236,5 @@ final class MobileAppController
         if (! Auth::check()) {
             Response::redirect(Url::to('/login'));
         }
-        if (Auth::isSuperAdmin()) {
-            Response::redirect(Url::to('/admin'));
-        }
     }
 }

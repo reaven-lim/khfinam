@@ -166,11 +166,15 @@ mysql -u root -p khfinam < database/migrations/002_features.sql
 # 5. (Optional) Generate bulk sample data
 php database/tools/bulk_transaction_seed.php
 
-# 6. Open in browser
-# http://localhost/khfinam/public/
+# 6. Open in browser (use APP_URL from .env — see README / INSTALLATION.md)
+# Typical: http://localhost/khfinam/login
+#          http://localhost/khfinam/dashboard   (user: demo)
+#          http://localhost/khfinam/app         (user: demo)
+#          http://localhost/khfinam/admin       (user: superadmin)
+# If document root is not rewritten: prefix with /public/, e.g. http://localhost/khfinam/public/login
 ```
 
-**Demo credentials:**
+**Demo credentials:** (`superadmin` → admin; `demo` → user dashboard + mobile shell)
 
 | Role | Username | Password |
 |---|---|---|
@@ -241,6 +245,8 @@ All other functionality is vanilla PHP — no Laravel, Symfony, or similar.
 
 ## Useful references
 
+- `DESIGN_SYSTEM.md` — Frontend design system and UI implementation guide
+- `docs/UI_COMPONENTS.md` — Reusable `resources/views/components/*` partials (dashboard/admin shells, analytics snippets)
 - `README.md` — Quick start and feature overview
 - `INSTALLATION.md` — Detailed XAMPP, cPanel, SSL, cron, permissions setup
 - `API_DOCS.md` — Internal HTTP endpoint documentation

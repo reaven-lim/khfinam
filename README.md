@@ -34,18 +34,37 @@ Production-oriented multi-user personal and small-business finance app: incomes,
 
 ### Demo accounts
 
-| Role        | Username    | Password   |
-|------------|-------------|------------|
+| Role        | Username     | Password    |
+|-------------|--------------|-------------|
 | Super admin | `superadmin` | `Admin@123` |
-| User       | `demo`      | `Demo@123` |
+| User        | `demo`       | `Demo@123` |
+
+Paths below are relative to **`APP_URL`** in `.env` (no trailing slash). Combine them for the full link, e.g. `{APP_URL}/login`.
+
+| Surface | Path | Use this account |
+|---------|------|------------------|
+| **Login** | `/login` | Either account |
+| **User dashboard** (analytics web UI) | `/dashboard` | `demo` |
+| **Mobile app shell** (PWA-friendly) | `/app` | `demo` |
+| **Admin console** | `/admin` | `superadmin` |
+
+**Examples (typical XAMPP):** if `APP_URL=http://localhost/khfinam` with the [root rewrite](INSTALLATION.md#url-options-choose-one) from INSTALLATION.md:
+
+- `http://localhost/khfinam/login`
+- `http://localhost/khfinam/dashboard`
+- `http://localhost/khfinam/app`
+- `http://localhost/khfinam/admin`
+
+If you open the app via **`/public/`** (document root pointed at the project folder instead of `public/` only), prefix the same paths, e.g. `http://localhost/khfinam/public/login`, `.../dashboard`, `.../app`, `.../admin`.
 
 Change passwords immediately in any non-demo deployment.
 
 ## Features (high level)
 
 - MVC-style PHP (no framework), PDO-only SQL, CSRF and rate limiting on auth
-- Mobile UI (`/app/…`) with dashboard, transaction entry, recurring list, stats, notifications, profile
-- Admin UI (`/admin/…`) for overview, users, transactions, categories, rates, audit, reports, backups settings
+- **User analytics dashboard** (`/dashboard/…`) — charts, wallets, recurring, reports (browser; uses `demo`)
+- **Mobile app shell** (`/app/…`) — dashboard, add transaction, wallets, stats, notifications, profile (`demo`)
+- **Admin console** (`/admin/…`) — overview, users, transactions, categories, rates, audit, reports, backups, settings (`superadmin`)
 - Cron: `cron/recurring.php`, `cron/backup.php` (see INSTALLATION.md)
 - PWA: `manifest.json`, `sw.js`, offline fallback `offline.html`
 - CSV export: `GET /api/reports/csv` (super admin session)
@@ -53,6 +72,8 @@ Change passwords immediately in any non-demo deployment.
 ## Documentation
 
 - **INSTALLATION.md** — XAMPP, AMPPS, cPanel, SSL, cron, permissions, SMTP
+- **DESIGN_SYSTEM.md** — Frontend tokens, layouts, charts/KPI patterns, light/dark behavior
+- **docs/UI_COMPONENTS.md** — Reusable `resources/views/components/*` partials
 - **API_DOCS.md** — Internal HTTP endpoints
 - **SECURITY.md** — Threat model and controls
 

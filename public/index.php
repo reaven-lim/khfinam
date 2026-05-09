@@ -17,9 +17,10 @@ header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header(
     "Content-Security-Policy: default-src 'self'; " .
-    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; " .
-    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; " .
-    "font-src https://fonts.gstatic.com 'self'; img-src 'self' data: blob:; connect-src 'self'"
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com; " .
+    "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://cdn.jsdelivr.net; " .
+    "font-src https://fonts.gstatic.com https://cdn.jsdelivr.net 'self'; " .
+    "img-src 'self' data: blob:; connect-src 'self'"
 );
 
 if (! Auth::check() && ! empty($_COOKIE['remember_token'])) {

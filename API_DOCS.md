@@ -1,6 +1,8 @@
 # KHFinaM — Internal API & Route Reference
 
 All routes are handled by `public/index.php`.  
+**Full URL for any path** = `APP_URL` from `.env` (no trailing slash) + path, e.g. `https://example.com/login`, `https://example.com/dashboard`.
+
 Authentication is **session-based** (cookie `KHFINAMSSESSID`).  
 All POST forms include a CSRF token field (`_csrf_token` by default, configurable via `APP_CSRF_KEY`).
 

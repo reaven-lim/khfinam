@@ -20,28 +20,28 @@ $defDate = date('Y-m-d');
     <?= Csrf::field() ?>
     <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Type</label>
-        <select name="type" id="txType" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm">
+        <select name="type" id="txType" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100">
             <option value="expense">Expense</option>
             <option value="income">Income</option>
         </select>
     </div>
     <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Title</label>
-        <input name="title" required class="w-full rounded-xl border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm" placeholder="e.g. Coffee" />
+        <input name="title" required class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. Coffee" />
     </div>
     <div class="grid grid-cols-2 gap-3">
         <div>
             <label class="block text-xs font-medium text-slate-500 mb-1">Amount</label>
-            <input name="amount" type="number" step="0.01" min="0.01" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input name="amount" type="number" step="0.01" min="0.01" required class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100" />
         </div>
         <div>
             <label class="block text-xs font-medium text-slate-500 mb-1">Date</label>
-            <input name="transaction_date" type="date" value="<?= Str::e($defDate) ?>" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" />
+            <input name="transaction_date" type="date" value="<?= Str::e($defDate) ?>" required class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 [color-scheme:light_dark]" />
         </div>
     </div>
     <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Wallet</label>
-        <select name="wallet_id" required class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+        <select name="wallet_id" required class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100">
             <?php foreach ($wallets as $w): ?>
                 <option value="<?= (int) $w['id'] ?>"><?= Str::e((string) $w['name']) ?></option>
             <?php endforeach; ?>
@@ -49,7 +49,7 @@ $defDate = date('Y-m-d');
     </div>
     <div id="catExpense">
         <label class="block text-xs font-medium text-slate-500 mb-1">Category</label>
-        <select name="category_id_exp" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm category-select">
+        <select name="category_id_exp" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 category-select">
             <?php foreach ($categoriesExpense as $c): ?>
                 <option value="<?= (int) $c['id'] ?>"><?= Str::e((string) $c['name']) ?></option>
             <?php endforeach; ?>
@@ -57,7 +57,7 @@ $defDate = date('Y-m-d');
     </div>
     <div id="catIncome" class="hidden">
         <label class="block text-xs font-medium text-slate-500 mb-1">Category</label>
-        <select name="category_id_inc" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm category-select-inc">
+        <select name="category_id_inc" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 category-select-inc">
             <?php foreach ($categoriesIncome as $c): ?>
                 <option value="<?= (int) $c['id'] ?>"><?= Str::e((string) $c['name']) ?></option>
             <?php endforeach; ?>
@@ -66,11 +66,11 @@ $defDate = date('Y-m-d');
     <input type="hidden" name="category_id" id="category_id" value="" />
     <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Notes</label>
-        <textarea name="notes" rows="2" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"></textarea>
+        <textarea name="notes" rows="2" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"></textarea>
     </div>
     <div>
         <label class="block text-xs font-medium text-slate-500 mb-1">Tags (comma-separated)</label>
-        <input name="tags" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder="e.g. trip, business" />
+        <input name="tags" class="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500" placeholder="e.g. trip, business" />
     </div>
     <label class="flex items-center gap-2 text-xs text-slate-600">
         <input type="checkbox" name="is_consolidated_parent" value="1" />

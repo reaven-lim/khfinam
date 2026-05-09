@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Controllers\Admin\AdminDashboardController;
 use App\Controllers\Admin\AdminFormController;
 use App\Controllers\Api\ReportApiController;
+use App\Controllers\Dashboard\DashboardController;
 use App\Controllers\AuthController;
 use App\Controllers\Mobile\MobileAppController;
 use App\Controllers\Mobile\NotificationController;
@@ -49,6 +50,15 @@ return [
     'POST /app/transaction/{id}/attach-delete' => [TxnController::class, 'attachDeletePost'],
     'POST /app/transaction/{id}/child' => [TxnController::class, 'addChild'],
     'POST /app/transaction/{id}' => [TxnController::class, 'update'],
+
+    'GET /dashboard' => [DashboardController::class, 'index'],
+    'GET /dashboard/transactions' => [DashboardController::class, 'transactions'],
+    'GET /dashboard/wallets' => [DashboardController::class, 'wallets'],
+    'GET /dashboard/recurring' => [DashboardController::class, 'recurring'],
+    'GET /dashboard/reports' => [DashboardController::class, 'reports'],
+    'GET /dashboard/reports/csv' => [DashboardController::class, 'reportsCsv'],
+    'GET /dashboard/reports/pdf' => [DashboardController::class, 'reportsPdf'],
+    'GET /dashboard/notifications' => [DashboardController::class, 'notifications'],
 
     'GET /admin' => [AdminDashboardController::class, 'index'],
     'GET /admin/transactions' => [AdminDashboardController::class, 'transactions'],

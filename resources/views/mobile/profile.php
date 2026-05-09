@@ -27,3 +27,11 @@ $u = $user ?? [];
     </label>
     <button type="submit" class="w-full rounded-xl bg-teal-600 text-white py-2 font-semibold text-sm">Save preferences</button>
 </form>
+
+<form method="post" action="<?= Str::e(Url::to('/logout')) ?>" class="mt-4">
+    <?= Csrf::field() ?>
+    <button type="submit"
+        class="w-full rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 py-3 font-semibold text-sm hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-colors">
+        Log out
+    </button>
+</form>

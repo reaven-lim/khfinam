@@ -425,8 +425,6 @@ final class AdminFormController
 
     private function guard(): void
     {
-        if (! Auth::check() || ! Auth::isSuperAdmin()) {
-            Response::redirect(Url::to('/login'));
-        }
+        Auth::requireSuperAdmin();
     }
 }

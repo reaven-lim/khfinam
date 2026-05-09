@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Core\Response;
 use App\Core\Session;
 
 final class Auth
@@ -53,5 +54,21 @@ final class Auth
         $u = self::user();
 
         return ($u['role'] ?? '') === 'super_admin';
+    }
+
+    public static function requireLogin(): void
+    {
+        if (! self::check()) {
+            Response::redirect(Url::to('/login'));
+        }
+    }
+
+    /** Ends request with redirect if the user is not a super admin (must be authenticated). */
+    public static function requireSuperAdmin(): void
+    {
+        self::requireLogin();
+        if (! self::isSuperAdmin()) {
+            Response::redirect(Url::to('/dashboard'));
+        }
     }
 }

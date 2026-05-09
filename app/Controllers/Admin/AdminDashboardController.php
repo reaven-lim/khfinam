@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers\Admin;
 
 use App\Core\Database;
-use App\Core\Response;
 use App\Helpers\Auth;
-use App\Helpers\Url;
 use App\Helpers\View;
 use App\Core\Request;
 use App\Repositories\CategoryRepository;
@@ -17,13 +15,14 @@ use App\Repositories\SettingsRepository;
 use App\Repositories\CurrencyRepository;
 use App\Repositories\WalletRepository;
 use App\Services\RecurringService;
+use App\Services\TransactionIntelligenceService;
 use PDO;
 
 final class AdminDashboardController
 {
     public function index(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $pdo = Database::pdo();
         $counts = [
             'users' => (int) $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn(),
@@ -41,39 +40,17 @@ final class AdminDashboardController
 
     public function transactions(): void
     {
-        $this->requireAdmin();
-        $pdo = Database::pdo();
+        Auth::requireSuperAdmin();
         $userId = (int) (Request::query('user_id', '0') ?? '0');
         $from = trim((string) (Request::query('from', '') ?? ''));
         $to = trim((string) (Request::query('to', '') ?? ''));
         $type = trim((string) (Request::query('type', '') ?? ''));
 
-        $sql = 'SELECT t.*, u.username, w.name AS wallet_name FROM transactions t
-            JOIN users u ON u.id = t.user_id JOIN wallets w ON w.id = t.wallet_id
-            WHERE t.deleted_at IS NULL';
-        $params = [];
-        if ($userId > 0) {
-            $sql .= ' AND t.user_id = ?';
-            $params[] = $userId;
-        }
-        if ($from !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
-            $sql .= ' AND t.transaction_date >= ?';
-            $params[] = $from;
-        }
-        if ($to !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
-            $sql .= ' AND t.transaction_date <= ?';
-            $params[] = $to;
-        }
-        if ($type === 'income' || $type === 'expense') {
-            $sql .= ' AND t.type = ?';
-            $params[] = $type;
-        }
-        $sql .= ' ORDER BY t.transaction_date DESC LIMIT 200';
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        View::renderLayout('admin', 'admin/transactions', [
-            'title' => 'Transactions',
+        $intel = new TransactionIntelligenceService();
+        $rows = $intel->filteredTransactionListing($userId, $from, $to, $type);
+
+        View::renderLayout('admin', 'admin/transactions', array_merge([
+            'title' => 'Transaction intelligence',
             'rows' => $rows,
             'users' => (new UserRepository())->all(500, 0),
             'filterUserId' => $userId,
@@ -81,12 +58,12 @@ final class AdminDashboardController
             'filterTo' => $to,
             'filterType' => $type,
             'user' => Auth::user(),
-        ]);
+        ], $intel->buildFilteredAnalyticsPayload($userId, $from, $to, $type)));
     }
 
     public function notifications(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $stmt = Database::pdo()->query(
             'SELECT n.*, u.username, u.email FROM notifications n JOIN users u ON u.id = n.user_id ORDER BY n.id DESC LIMIT 150'
         );
@@ -103,7 +80,7 @@ final class AdminDashboardController
 
     public function users(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $rows = (new UserRepository())->all(200, 0);
         View::renderLayout('admin', 'admin/users', [
             'title' => 'Users',
@@ -114,7 +91,7 @@ final class AdminDashboardController
 
     public function settings(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $settings = (new SettingsRepository())->getGlobal();
         View::renderLayout('admin', 'admin/settings', [
             'title' => 'System settings',
@@ -127,7 +104,7 @@ final class AdminDashboardController
 
     public function categories(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $rows = Database::pdo()->query('SELECT * FROM categories ORDER BY type, sort_order, id')->fetchAll(PDO::FETCH_ASSOC);
         View::renderLayout('admin', 'admin/categories', [
             'title' => 'Categories',
@@ -139,7 +116,7 @@ final class AdminDashboardController
 
     public function rates(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $pdo = Database::pdo();
         $rows = $pdo->query(
             'SELECT e.effective_date, e.rate, cf.code AS from_c, ct.code AS to_c, e.id
@@ -159,7 +136,7 @@ final class AdminDashboardController
 
     public function audit(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $pdo = Database::pdo();
         $stmt = $pdo->query('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 200');
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -172,7 +149,7 @@ final class AdminDashboardController
 
     public function backups(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $rows = Database::pdo()->query('SELECT * FROM backups ORDER BY id DESC LIMIT 50')->fetchAll(PDO::FETCH_ASSOC);
         View::renderLayout('admin', 'admin/backups', [
             'title' => 'Backups',
@@ -185,7 +162,7 @@ final class AdminDashboardController
 
     public function recurring(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         $pdo = Database::pdo();
         $rows = $pdo->query(
             'SELECT r.*, u.username, w.name AS wallet_name FROM recurring_schedules r
@@ -225,20 +202,11 @@ final class AdminDashboardController
 
     public function reports(): void
     {
-        $this->requireAdmin();
+        Auth::requireSuperAdmin();
         View::renderLayout('admin', 'admin/reports', [
             'title' => 'Reports',
             'user' => Auth::user(),
         ]);
     }
 
-    private function requireAdmin(): void
-    {
-        if (! Auth::check()) {
-            Response::redirect(Url::to('/login'));
-        }
-        if (! Auth::isSuperAdmin()) {
-            Response::redirect(Url::to('/app'));
-        }
-    }
 }

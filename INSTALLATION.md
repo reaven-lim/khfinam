@@ -19,7 +19,8 @@ Set in `.env`:
 APP_URL=http://localhost/khfinam
 ```
 
-Visit: `http://localhost/khfinam/`
+Visit: `http://localhost/khfinam/`  
+Demo entry points on the same origin: `/login`, `/dashboard`, `/app`, `/admin` (prepend this host + path; see README **Demo accounts**).
 
 **Option B — point DocumentRoot directly at `public/`**
 
@@ -33,6 +34,8 @@ Set in `.env`:
 ```
 APP_URL=http://khfinam.local
 ```
+
+Then open e.g. `http://khfinam.local/login`, `http://khfinam.local/dashboard`, `http://khfinam.local/app`, `http://khfinam.local/admin`.
 
 ### Cron on Windows
 
