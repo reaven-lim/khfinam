@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+# PHP Security Rules
+
+- Always use PDO prepared statements
+- Never use raw SQL interpolation
+- Sanitize all output
+- Use CSRF tokens everywhere
+- Validate uploads strictly
+- Use secure sessions
+- Use password_hash/password_verify
+- Prevent XSS
+- Prevent directory traversal
+- Validate MIME types
+- Escape HTML output

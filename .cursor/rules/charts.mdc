@@ -1,0 +1,16 @@
+---
+alwaysApply: true
+---
+
+# Chart Rules
+
+- Every analytics page must contain charts
+- Avoid text-only summaries
+- Prefer visual KPIs
+- Use donut charts for categories
+- Use area charts for cashflow
+- Use radial progress for savings
+- Use sparkline charts inside KPI cards
+- Use comparison charts monthly/yearly
+- Prefer dashboards over listings
+- Tables should be secondary

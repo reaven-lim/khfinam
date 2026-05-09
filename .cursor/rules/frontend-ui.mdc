@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+---
+
+# KHFinaM UI Rules
+
+- Avoid boring CRUD layouts
+- Prefer analytics-first dashboard
+- Prefer cards over tables
+- Use ApexCharts heavily
+- Every dashboard page must contain charts
+- Mobile-first design mandatory
+- Use Material Design inspired spacing
+- Use premium fintech aesthetics
+- Prefer glassmorphism lightly
+- Use gradients subtly
+- Use dark mode optimized layouts
+- Avoid plain white screens
+- Use KPI cards extensively
+- Use sparkline mini charts
+- Use responsive grids
+- Avoid large boring forms
+- Use segmented forms/cards
+- Add microinteractions
+- Prefer expandable transaction cards
+- Avoid excessive text density
+- Use financial visual hierarchy
+- Use animated counters
+- Use sticky mobile action buttons
+- Use bottom mobile navigation
+- Prefer visually rich analytics panels
