@@ -114,4 +114,11 @@ final class WalletTypeRepository
         }
         $pdo->prepare('DELETE FROM wallet_types WHERE id = ?')->execute([$id]);
     }
+
+    public function setActive(int $id, bool $active): void
+    {
+        $pdo = Database::pdo();
+        $pdo->prepare('UPDATE wallet_types SET is_active = ?, updated_at = NOW() WHERE id = ?')
+            ->execute([$active ? 1 : 0, $id]);
+    }
 }

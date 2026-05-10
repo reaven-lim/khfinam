@@ -414,14 +414,160 @@ final class AdminDashboardController
     public function walletTypes(): void
     {
         Auth::requireSuperAdmin();
-        $rows = (new WalletTypeRepository())->allOrdered(false);
+        $typeRepo = new WalletTypeRepository();
+        $walletRepo = new WalletRepository();
+        $walletSvc = new WalletService();
+        $types = $typeRepo->allOrdered(false);
+        $usageByType = $walletRepo->usageAggregateByWalletType();
+        $balanceByType = self::balanceBaseSumByWalletType($usageByType, $walletSvc);
+
+        $rows = [];
+        foreach ($types as $t) {
+            $tid = (int) $t['id'];
+            $u = $usageByType[$tid] ?? ['wallets' => [], 'users' => [], 'analytics_wallet_count' => 0];
+            $wc = count($u['wallets']);
+            $rows[] = array_merge($t, [
+                'wallet_count' => $wc,
+                'users_count' => count($u['users']),
+                'balance_base_total' => $balanceByType[$tid] ?? 0.0,
+                'analytics_wallet_count' => (int) $u['analytics_wallet_count'],
+            ]);
+        }
+
+        $totalTypes = count($types);
+        $activeTypes = count(array_filter($types, static fn (array $t): bool => ! empty($t['is_active'])));
+        $customTypes = count(array_filter($types, static fn (array $t): bool => empty($t['is_system'])));
+        $coreTypes = $totalTypes - $customTypes;
+        $totalWallets = (int) Database::pdo()->query('SELECT COUNT(*) FROM wallets')->fetchColumn();
+        $unusedTypes = count(array_filter($rows, static fn (array $r): bool => (int) ($r['wallet_count'] ?? 0) === 0));
+        $disabledTypes = count(array_filter($types, static fn (array $t): bool => empty($t['is_active'])));
+
+        $mostUsed = null;
+        foreach ($rows as $r) {
+            if ($mostUsed === null || (int) $r['wallet_count'] > (int) $mostUsed['wallet_count']) {
+                $mostUsed = $r;
+            }
+        }
+        $recentType = null;
+        foreach ($types as $t) {
+            if ($recentType === null || (string) ($t['created_at'] ?? '') > (string) ($recentType['created_at'] ?? '')) {
+                $recentType = $t;
+            }
+        }
+
+        usort($rows, static function (array $a, array $b): int {
+            $sa = ! empty($a['is_system']);
+            $sb = ! empty($b['is_system']);
+            if ($sa !== $sb) {
+                return $sa ? -1 : 1;
+            }
+
+            return ((int) ($a['sort_order'] ?? 0)) <=> ((int) ($b['sort_order'] ?? 0));
+        });
+
+        $coreWalletAssignments = 0;
+        $customWalletAssignments = 0;
+        foreach ($rows as $r) {
+            $n = (int) ($r['wallet_count'] ?? 0);
+            if (! empty($r['is_system'])) {
+                $coreWalletAssignments += $n;
+            } else {
+                $customWalletAssignments += $n;
+            }
+        }
+
         View::renderLayout('admin', 'admin/wallet_types', [
-            'title' => 'Wallet account types',
+            'title' => 'Wallet types',
             'rows' => $rows,
-            'message' => \App\Core\Session::getFlash('message'),
-            'error' => \App\Core\Session::getFlash('error'),
+            'typeKpis' => [
+                'total' => $totalTypes,
+                'active' => $activeTypes,
+                'custom' => $customTypes,
+                'core' => $coreTypes,
+                'total_wallets' => $totalWallets,
+                'unused_types' => $unusedTypes,
+                'disabled' => $disabledTypes,
+            ],
+            'mostUsedRow' => $mostUsed,
+            'recentTypeRow' => $recentType,
+            'taxonomyWalletLabels' => ['Built-in types', 'Custom types'],
+            'taxonomyWalletSeries' => [$coreWalletAssignments, $customWalletAssignments],
+            'baseCurrency' => (string) Config::get('app.base_currency', 'MYR'),
+            'message' => Session::getFlash('message'),
+            'error' => Session::getFlash('error'),
             'user' => Auth::user(),
         ]);
+    }
+
+    public function walletTypeShow(string $id): void
+    {
+        Auth::requireSuperAdmin();
+        $tid = (int) $id;
+        if ($tid <= 0) {
+            Response::abort(404);
+        }
+        $typeRepo = new WalletTypeRepository();
+        $t = $typeRepo->findById($tid);
+        if ($t === null) {
+            Response::abort(404);
+        }
+        $walletRepo = new WalletRepository();
+        $walletSvc = new WalletService();
+        $usageByType = $walletRepo->usageAggregateByWalletType();
+        $u = $usageByType[$tid] ?? ['wallets' => [], 'users' => [], 'analytics_wallet_count' => 0];
+        $balanceByType = self::balanceBaseSumByWalletType($usageByType, $walletSvc);
+        $stats = [
+            'wallet_count' => count($u['wallets']),
+            'users_count' => count($u['users']),
+            'balance_base_total' => $balanceByType[$tid] ?? 0.0,
+            'analytics_wallet_count' => (int) $u['analytics_wallet_count'],
+        ];
+        $recentWallets = $walletRepo->recentWalletsForType($tid, 14);
+
+        View::renderLayout('admin', 'admin/wallet_type_show', [
+            'title' => 'Wallet type · ' . (string) ($t['label'] ?? ''),
+            'typeRow' => $t,
+            'stats' => $stats,
+            'recentWallets' => $recentWallets,
+            'baseCurrency' => (string) Config::get('app.base_currency', 'MYR'),
+            'message' => Session::getFlash('message'),
+            'error' => Session::getFlash('error'),
+            'user' => Auth::user(),
+        ]);
+    }
+
+    /**
+     * @param array<int, array{wallets: list<array{id:int, user_id:int}>, users: array<int, true>, analytics_wallet_count: int}> $usageByType
+     *
+     * @return array<int, float>
+     */
+    private static function balanceBaseSumByWalletType(array $usageByType, WalletService $walletSvc): array
+    {
+        $userIds = [];
+        foreach ($usageByType as $bundle) {
+            foreach ($bundle['wallets'] as $w) {
+                $userIds[(int) $w['user_id']] = true;
+            }
+        }
+        $balanceByUserWallet = [];
+        foreach (array_keys($userIds) as $uid) {
+            $balanceByUserWallet[$uid] = [];
+            foreach ($walletSvc->walletBalancesForUser((int) $uid) as $b) {
+                $balanceByUserWallet[$uid][(int) $b['wallet_id']] = (float) $b['balance_base'];
+            }
+        }
+        $sums = [];
+        foreach ($usageByType as $tid => $bundle) {
+            $sum = 0.0;
+            foreach ($bundle['wallets'] as $w) {
+                $uid = (int) $w['user_id'];
+                $wid = (int) $w['id'];
+                $sum += $balanceByUserWallet[$uid][$wid] ?? 0.0;
+            }
+            $sums[(int) $tid] = round($sum, 2);
+        }
+
+        return $sums;
     }
 
     public function settings(): void

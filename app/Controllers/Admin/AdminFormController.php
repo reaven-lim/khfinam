@@ -20,6 +20,7 @@ use App\Services\DatabaseRestoreService;
 use App\Services\MailService;
 use App\Services\RecurringService;
 use App\Services\WalletService;
+use App\Helpers\WalletTypeUi;
 use App\Repositories\WalletTypeRepository;
 use PDO;
 
@@ -631,27 +632,33 @@ final class AdminFormController
             Session::flash('error', 'Invalid session.');
             Response::redirect(Url::to('/admin/wallet-types'));
         }
-        $slug = strtolower(trim((string) (Request::post()['slug'] ?? '')));
         $label = trim((string) (Request::post()['label'] ?? ''));
-        if ($label === '' || ! preg_match('/^[a-z0-9_]{1,64}$/', $slug)) {
-            Session::flash('error', 'Label and lowercase slug (letters, digits, underscores) required.');
-            Response::redirect(Url::to('/admin/wallet-types'));
-        }
-        if ((new WalletTypeRepository())->findBySlug($slug) !== null) {
-            Session::flash('error', 'Slug already exists.');
+        $manualId = trim((string) (Request::post()['internal_id_manual'] ?? ''));
+        $typeRepo = new WalletTypeRepository();
+
+        if ($label === '') {
+            Session::flash('error', 'Please enter a wallet type name.');
             Response::redirect(Url::to('/admin/wallet-types'));
         }
         try {
-            (new WalletTypeRepository())->create([
+            $slug = WalletTypeUi::resolveNewSlug($typeRepo, $label, $manualId !== '' ? $manualId : null);
+        } catch (\InvalidArgumentException $e) {
+            Session::flash('error', $e->getMessage());
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        try {
+            $icon = WalletTypeUi::sanitizeIcon(Request::post()['icon'] ?? 'wallet', null);
+            $newId = $typeRepo->create([
                 'slug' => $slug,
                 'label' => $label,
-                'icon' => trim((string) (Request::post()['icon'] ?? 'wallet')) ?: 'wallet',
+                'icon' => $icon,
                 'sort_order' => (int) (Request::post()['sort_order'] ?? 50),
                 'is_active' => ! empty(Request::post()['is_active']),
                 'is_system' => false,
             ]);
             AuditLogger::log('wallet_type_create', Auth::id(), 'wallet_type', $slug);
             Session::flash('message', 'Wallet type added.');
+            Response::redirect(Url::to('/admin/wallet-types/' . $newId));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
@@ -670,10 +677,17 @@ final class AdminFormController
             Session::flash('error', 'Invalid type.');
             Response::redirect(Url::to('/admin/wallet-types'));
         }
+        $typeRepo = new WalletTypeRepository();
+        $existing = $typeRepo->findById($id);
+        if ($existing === null) {
+            Session::flash('error', 'Wallet type not found.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $legacyIcon = (string) ($existing['icon'] ?? 'wallet');
         try {
-            (new WalletTypeRepository())->update($id, [
+            $typeRepo->update($id, [
                 'label' => trim((string) (Request::post()['label'] ?? '')),
-                'icon' => trim((string) (Request::post()['icon'] ?? 'wallet')) ?: 'wallet',
+                'icon' => WalletTypeUi::sanitizeIcon(Request::post()['icon'] ?? 'wallet', $legacyIcon),
                 'sort_order' => (int) (Request::post()['sort_order'] ?? 0),
                 'is_active' => ! empty(Request::post()['is_active']),
             ]);
@@ -681,6 +695,37 @@ final class AdminFormController
             Session::flash('message', 'Wallet type updated.');
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
+        }
+        $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+        if ($redirect === 'detail') {
+            Response::redirect(Url::to('/admin/wallet-types/' . $id));
+        }
+        Response::redirect(Url::to('/admin/wallet-types'));
+    }
+
+    public function walletTypeSetStatus(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $id = (int) (Request::post()['type_id'] ?? 0);
+        if ($id <= 0) {
+            Session::flash('error', 'Invalid type.');
+            Response::redirect(Url::to('/admin/wallet-types'));
+        }
+        $wantActive = ! empty(Request::post()['is_active']);
+        try {
+            (new WalletTypeRepository())->setActive($id, $wantActive);
+            AuditLogger::log('wallet_type_update', Auth::id(), 'wallet_type', (string) $id);
+            Session::flash('message', $wantActive ? 'Wallet type enabled.' : 'Wallet type disabled.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        $red = trim((string) (Request::post()['_redirect'] ?? ''));
+        if ($red === 'detail') {
+            Response::redirect(Url::to('/admin/wallet-types/' . $id));
         }
         Response::redirect(Url::to('/admin/wallet-types'));
     }

@@ -167,6 +167,61 @@ final class WalletRepository
         return (int) $stmt->fetchColumn();
     }
 
+    /**
+     * Per wallet_type_id: wallets, distinct users, analytics-cohort wallet count.
+     *
+     * @return array<int, array{wallets: list<array{id:int, user_id:int}>, users: array<int, true>, analytics_wallet_count: int}>
+     */
+    public function usageAggregateByWalletType(): array
+    {
+        $pdo = Database::pdo();
+        $stmt = $pdo->query(
+            'SELECT w.id, w.user_id, w.wallet_type_id, u.include_in_analytics
+             FROM wallets w
+             INNER JOIN users u ON u.id = w.user_id'
+        );
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $out = [];
+        foreach ($rows as $r) {
+            $tid = (int) $r['wallet_type_id'];
+            if (! isset($out[$tid])) {
+                $out[$tid] = [
+                    'wallets' => [],
+                    'users' => [],
+                    'analytics_wallet_count' => 0,
+                ];
+            }
+            $wid = (int) $r['id'];
+            $uid = (int) $r['user_id'];
+            $out[$tid]['wallets'][] = ['id' => $wid, 'user_id' => $uid];
+            $out[$tid]['users'][$uid] = true;
+            if (! empty($r['include_in_analytics'])) {
+                ++$out[$tid]['analytics_wallet_count'];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function recentWalletsForType(int $typeId, int $limit = 12): array
+    {
+        $pdo = Database::pdo();
+        $lim = max(1, min(100, $limit));
+        $stmt = $pdo->prepare(
+            'SELECT w.*, u.username, u.email, c.code AS currency_code
+             FROM wallets w
+             INNER JOIN users u ON u.id = w.user_id
+             INNER JOIN currencies c ON c.id = w.currency_id
+             WHERE w.wallet_type_id = ?
+             ORDER BY w.updated_at DESC, w.id DESC
+             LIMIT ' . $lim
+        );
+        $stmt->execute([$typeId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** @return array<string, mixed>|null */
     public function findByIdForAdmin(int $walletId): ?array
     {
