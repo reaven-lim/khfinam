@@ -33,6 +33,8 @@ Production-oriented multi-user personal and small-business finance app: incomes,
 
    **Transfers (`type = transfer`):** databases created from an older `001` before native transfers need **`database/migrations/004_transaction_transfer_type.sql`** once. The **current** `001` ships with transfer columns already; skip `004` only if those columns exist.
 
+   **Analytics cohort on users (`include_in_analytics`):** if admin wallet-type screens or analytics hit **`Unknown column 'include_in_analytics'`** on `users`, run **`database/migrations/005_include_in_analytics.sql`** once.
+
 6. **Presentation demo dataset** (recommended for screenshots / dashboards / admin analytics):
 
    ```bash
@@ -67,7 +69,7 @@ Paths below are relative to **`APP_URL`** in `.env` (no trailing slash). Combine
 | **Mobile app shell** (PWA-friendly) | `/app` | `demo` |
 | **Admin console** | `/admin` | `superadmin` |
 | **Admin — all users’ wallets** | `/admin/wallets` | `superadmin` |
-| **Admin — wallet/account type labels** | `/admin/wallet-types` | `superadmin` |
+| **Admin — wallet types (built-in + custom)** | `/admin/wallet-types` (directory), `/admin/wallet-types/{id}` (detail) | `superadmin` |
 
 **Examples (typical XAMPP):** if `APP_URL=http://localhost/khfinam` with the [root rewrite](INSTALLATION.md#url-options-choose-one) from INSTALLATION.md:
 
@@ -85,7 +87,7 @@ Change passwords immediately in any non-demo deployment.
 - MVC-style PHP (no framework), PDO-only SQL, CSRF and rate limiting on auth
 - **User analytics dashboard** (`/dashboard/…`) — charts, wallets, recurring, reports (browser; uses `demo`)
 - **Mobile app shell** (`/app/…`) — dashboard, **add expense / income / transfer** (`/app/add`), wallets, stats, notifications, profile (`demo`)
-- **Admin console** (`/admin/…`) — overview, users, transactions, categories, rates, **wallets** (`/admin/wallets`), **wallet types** (`/admin/wallet-types`), audit, reports, backups, settings (`superadmin`)
+- **Admin console** (`/admin/…`) — overview, users, transactions, categories, rates, **wallets** (`/admin/wallets`), **wallet types** (`/admin/wallet-types`: governance overview + create; **`/admin/wallet-types/{id}`** per-type metrics, edits, deactivate/delete when safe), audit, reports, backups, settings (`superadmin`)
 - Cron: `cron/recurring.php`, `cron/backup.php` (see INSTALLATION.md)
 - PWA: `manifest.json`, `sw.js`, offline fallback `offline.html`
 - CSV export: `GET /api/reports/csv` (super admin session)
@@ -102,6 +104,7 @@ Change passwords immediately in any non-demo deployment.
 
 - **`Table 'wallet_types' doesn't exist` (admin wallet types / wallets pages):** the database predates customizable wallet types. Import **`database/migrations/003_wallet_account_types.sql`** once (see upgrade note under **Quick start** step 5), e.g. `mysql -u root -p khfinam < database/migrations/003_wallet_account_types.sql` or paste the file into phpMyAdmin.
 - **`Unknown column 'from_wallet_id'` / `transfer` type errors:** run **`database/migrations/004_transaction_transfer_type.sql`** once (see **Quick start** step 5).
+- **`Unknown column 'include_in_analytics'`** (often on **`/admin/wallet-types`):** apply **`database/migrations/005_include_in_analytics.sql`** once so per-type “analytics cohort” counts can query `users.include_in_analytics`.
 - **404 on all routes:** enable `mod_rewrite`; ensure `.htaccess` in `public/` is allowed (`AllowOverride All`).
 - **Database connection errors:** verify `.env` `DB_*` and that MySQL listens on the configured host/port.
 - **Blank page:** set `APP_DEBUG=true` temporarily in `.env` and check `logs/` and the PHP error log.

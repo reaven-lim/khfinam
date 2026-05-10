@@ -31,7 +31,8 @@ khfinam/
 │   │   ├── Config.php          # Flat key-path config accessor
 │   │   ├── Str.php             # String utilities
 │   │   ├── Url.php             # URL generation helpers
-│   │   └── View.php            # PHP view renderer with layout support
+│   │   ├── View.php            # PHP view renderer with layout support
+│   │   └── WalletTypeUi.php    # Admin wallet-type copy: icon presets, slug helpers
 │   ├── Repositories/           # PDO data-access layer (no ORM)
 │   │   ├── CategoryRepository.php
 │   │   ├── CurrencyRepository.php
@@ -65,7 +66,8 @@ khfinam/
 │   │   ├── 001_initial_schema.sql   # Base schema (+ wallet_types / transfer-capable transactions in current tree)
 │   │   ├── 002_features.sql         # is_internal_transfer, transfer_group, indexes
 │   │   ├── 003_wallet_account_types.sql  # One-time upgrade: legacy wallet_type enum → wallet_types + wallet_type_id
-│   │   └── 004_transaction_transfer_type.sql  # One-time upgrade: type includes transfer + from_wallet_id / to_wallet_id
+│   │   ├── 004_transaction_transfer_type.sql  # One-time upgrade: type includes transfer + from_wallet_id / to_wallet_id
+│   │   └── 005_include_in_analytics.sql        # Adds users.include_in_analytics (analytics cohort on admin wallet types, etc.)
 │   ├── seeders/
 │   │   └── 002_demo_seed.sql
 │   └── tools/
@@ -80,7 +82,7 @@ khfinam/
 ├── resources/views/
 │   ├── layouts/                # admin.php, mobile.php, guest.php
 │   ├── auth/                   # login.php, forgot.php, reset.php
-│   ├── admin/                  # dashboard, users, transactions, categories, rates, wallets, wallet_types, audit, backups, reports, recurring, settings, notifications
+│   ├── admin/                  # dashboard, users, transactions, categories, rates, wallets, wallet_types (+ wallet_type_show), partials, audit, backups, reports, recurring, settings, notifications
 │   └── mobile/                 # dashboard, add, wallets, stats, recurring, recurring_new, notifications, profile, transaction_show
 ├── routes/web.php              # Full route table (returned array)
 ├── storage/backups/            # mysqldump output files

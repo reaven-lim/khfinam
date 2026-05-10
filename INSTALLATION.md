@@ -5,7 +5,7 @@
 1. Install XAMPP with Apache + MySQL + PHP 8.2+.
 2. Place the project under `htdocs/khfinam`.
 3. `composer install` in the project root.
-4. Create DB and import SQL in order: `001_initial_schema.sql` → `002_demo_seed.sql` → `002_features.sql` (exact paths in README **Quick start**). For an **existing** database that predates customizable wallet types, run **`database/migrations/003_wallet_account_types.sql` once** (see README upgrade note); skip `003` on a brand-new DB created from the current `001`. If the DB predates **native transfer** rows, run **`database/migrations/004_transaction_transfer_type.sql` once** (see README); skip `004` when the current `001` already created `from_wallet_id` / `to_wallet_id`.
+4. Create DB and import SQL in order: `001_initial_schema.sql` → `002_demo_seed.sql` → `002_features.sql` (exact paths in README **Quick start**). For an **existing** database that predates customizable wallet types, run **`database/migrations/003_wallet_account_types.sql` once** (see README upgrade note); skip `003` on a brand-new DB created from the current `001`. If the DB predates **native transfer** rows, run **`database/migrations/004_transaction_transfer_type.sql` once** (see README); skip `004` when the current `001` already created `from_wallet_id` / `to_wallet_id`. If **`users`** lacks **`include_in_analytics`** and admin analytics or **`/admin/wallet-types`** fails with **unknown column**, run **`database/migrations/005_include_in_analytics.sql` once**.
 5. Copy `.env.example` to `.env`.
 
 ### URL options (choose one)
@@ -102,8 +102,9 @@ SESSION_SECURE_COOKIE=true
 | `database/migrations/002_features.sql` | After seed (extra feature flags / columns) |
 | `database/migrations/003_wallet_account_types.sql` | **One-time upgrade only** if `wallets` still has legacy `wallet_type` enum and no `wallet_type_id` FK flow |
 | `database/migrations/004_transaction_transfer_type.sql` | **One-time upgrade** if `transactions` lacks `transfer` in `type` enum or `from_wallet_id` / `to_wallet_id` (skip when the current `001` was applied fresh) |
+| `database/migrations/005_include_in_analytics.sql` | **One-time upgrade** when `users` lacks `include_in_analytics` (required for admin wallet-type “analytics cohort” counts and related joins) |
 
-Super admin URLs for wallet management: `/admin/wallets` (per-user wallets), `/admin/wallet-types` (Bank, E-wallet, Cash, etc.).
+Super admin URLs for wallet management: `/admin/wallets` (per-user wallets), `/admin/wallet-types` (overview **and** `/admin/wallet-types/{id}` per type: metrics, edit, deactivate).
 
 ## SMTP
 

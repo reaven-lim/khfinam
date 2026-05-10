@@ -65,6 +65,7 @@ Path is rooted at `resources/views/`. Unknown partials trigger HTTP 500 and a sh
 | Partial | Purpose |
 |--------|---------|
 | `hero-kpi-gradient-card` | Gradient KPI tile used on `/admin` overview. Props: `gradientShell` (full card classes), `label`, `value`, `footnote`, `icon`, optional `valueClass` (defaults to `text-3xl`). |
+| `wallet-type-icon-select` | Admin wallet type create/edit: emoji + label options, values are Lucide keys. Props: `selectId`, `selected`, optional `required`, `selectClass`, `extrasIcon` (prepends a row when the saved icon is not in the preset list). |
 
 ---
 

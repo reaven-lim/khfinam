@@ -75,7 +75,8 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 |--------|------|-------------|
 | GET | `/admin` | Overview: user count, transaction count, global savings, chart |
 | GET | `/admin/wallets` | All users’ wallets (filter `user_id`), create form; edit/deactivate/delete per wallet |
-| GET | `/admin/wallet-types` | Manage customizable wallet/account type labels (system + custom) |
+| GET | `/admin/wallet-types` | Wallet types governance: overview KPIs, built-in vs custom directory, modal create flow |
+| GET | `/admin/wallet-types/{id}` | Single type: metrics, edit label/icon/sort/active, deactivate, delete unused custom types |
 | GET | `/admin/transactions` | Transactions (filter: `user_id`, `from`, `to`, `type`) |
 | GET | `/admin/users` | User list |
 | GET | `/admin/categories` | Category list + inline edit/delete forms |
@@ -101,9 +102,10 @@ All POST forms include a CSRF token field (`_csrf_token` by default, configurabl
 | POST | `/admin/wallets/store` | Create wallet for any user (`user_id`, `name`, `wallet_type_id`, `currency_id`, `opening_balance`, `min_balance_threshold`, `sort_order`, `is_default`, `is_active`, `notes`) |
 | POST | `/admin/wallets/update` | Update wallet (`wallet_user_id`, `wallet_id`, same body fields as store) |
 | POST | `/admin/wallets/delete` | Hard-delete empty wallet (`wallet_user_id`, `wallet_id`) |
-| POST | `/admin/wallet-types/store` | Create custom type (`slug`, `label`, `icon`, `sort_order`, `is_active`) |
-| POST | `/admin/wallet-types/update` | Update type label/icon/order/active (`type_id`, …) |
-| POST | `/admin/wallet-types/delete` | Delete custom unused type (`type_id`; system types protected) |
+| POST | `/admin/wallet-types/store` | Create custom type (`label`, `icon` Lucide key from presets, `sort_order`, `is_active`). **`slug`** is generated from **`label`** unless **`internal_id_manual`** overrides (lowercase `a-z0-9_`, unique). Redirects to the new **`/admin/wallet-types/{id}`**. |
+| POST | `/admin/wallet-types/update` | Update type (`type_id`, `label`, `icon`, `sort_order`, hidden `is_active` + checkbox). Optional **`_redirect=detail`** to return to the type detail page after save. |
+| POST | `/admin/wallet-types/status` | Set active flag (`type_id`, `is_active`: `0` / `1`). Optional **`_redirect=detail`** for the type page. |
+| POST | `/admin/wallet-types/delete` | Delete custom unused type (`type_id`; built-in / system rows protected). |
 
 ### Category management
 
