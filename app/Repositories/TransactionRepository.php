@@ -55,6 +55,7 @@ SQL;
             $sql .= ' AND transaction_date <= ?';
             $params[] = $to;
         }
+        $sql .= ' AND user_id IN (' . UserRepository::analyticsIncludedUserIdsSubquery() . ')';
         $sql .= ' GROUP BY type';
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
@@ -123,6 +124,78 @@ SQL;
         $stmt->execute([$userId]);
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Recent ledger rows where this wallet is the primary, source, or destination account.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function recentForWalletParticipation(int $walletId, int $userId, int $limit = 18): array
+    {
+        $pdo = Database::pdo();
+        $lim = max(1, min(100, $limit));
+        [$ls, $lj] = self::listingSelectFragments();
+        $stmt = $pdo->prepare(
+            'SELECT ' . $ls . $lj
+             . ' WHERE t.user_id = ? AND t.deleted_at IS NULL AND t.parent_transaction_id IS NULL
+               AND (t.wallet_id = ? OR t.from_wallet_id = ? OR t.to_wallet_id = ?)
+             ORDER BY t.transaction_date DESC, t.id DESC
+             LIMIT ' . $lim
+        );
+        $stmt->execute([$userId, $walletId, $walletId, $walletId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Monthly income / expense on wallet plus transfer legs (base currency).
+     *
+     * @return array<int, array{ym: string, inc: float, exp: float, xfer_out: float, xfer_in: float}>
+     */
+    public function walletMonthlyFlowSeries(int $walletId, int $userId, int $months = 8): array
+    {
+        $pdo = Database::pdo();
+        $m = max(1, min(24, $months));
+        $stmt = $pdo->prepare(
+            "SELECT DATE_FORMAT(transaction_date,'%Y-%m') AS ym,
+                SUM(CASE WHEN type='income' AND wallet_id = ? AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS inc,
+                SUM(CASE WHEN type='expense' AND wallet_id = ? AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS exp,
+                SUM(CASE WHEN type='transfer' AND from_wallet_id = ? THEN amount_base ELSE 0 END) AS xfer_out,
+                SUM(CASE WHEN type='transfer' AND to_wallet_id = ? THEN amount_base ELSE 0 END) AS xfer_in
+             FROM transactions
+             WHERE user_id = ? AND deleted_at IS NULL AND parent_transaction_id IS NULL
+               AND (
+                 (type IN ('income','expense') AND wallet_id = ?)
+                 OR (type = 'transfer' AND (from_wallet_id = ? OR to_wallet_id = ?))
+               )
+             GROUP BY ym ORDER BY ym DESC LIMIT " . $m
+        );
+        $stmt->execute([
+            $walletId, $walletId, $walletId, $walletId,
+            $userId, $walletId, $walletId, $walletId,
+        ]);
+
+        return array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    }
+
+    /** @return array{count: int, volume_base: float} */
+    public function walletTransferStats(int $walletId, int $userId, int $days = 90): array
+    {
+        $pdo = Database::pdo();
+        $d = max(1, min(3650, $days));
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(amount_base),0) AS v
+             FROM transactions
+             WHERE user_id = ? AND deleted_at IS NULL AND parent_transaction_id IS NULL
+               AND type = 'transfer'
+               AND (from_wallet_id = ? OR to_wallet_id = ?)
+               AND transaction_date >= (CURDATE() - INTERVAL {$d} DAY)"
+        );
+        $stmt->execute([$userId, $walletId, $walletId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['c' => 0, 'v' => 0];
+
+        return ['count' => (int) $row['c'], 'volume_base' => (float) $row['v']];
     }
 
     /** @return array<string, mixed>|null */
@@ -200,6 +273,8 @@ SQL;
         if ($userId > 0) {
             $clauses[] = 't.user_id = ?';
             $params[] = $userId;
+        } else {
+            $clauses[] = 't.user_id IN (' . UserRepository::analyticsIncludedUserIdsSubquery() . ')';
         }
         if ($from !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $from)) {
             $clauses[] = 't.transaction_date >= ?';
@@ -364,5 +439,68 @@ SQL;
         $top = $rows[0];
 
         return ['name' => (string) $top['name'], 'total' => (float) $top['total']];
+    }
+
+    /**
+     * Trailing calendar months of income vs expense for one user (base currency, flow semantics).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function monthlyIncomeExpenseSeriesForUser(int $userId, int $months = 6): array
+    {
+        $pdo = Database::pdo();
+        $m = max(1, min(24, $months));
+        $stmt = $pdo->prepare(
+            "SELECT DATE_FORMAT(transaction_date,'%Y-%m') AS ym,
+                SUM(CASE WHEN type='income' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS inc,
+                SUM(CASE WHEN type='expense' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS exp
+             FROM transactions
+             WHERE user_id = ? AND deleted_at IS NULL AND parent_transaction_id IS NULL
+             GROUP BY ym ORDER BY ym DESC LIMIT " . $m
+        );
+        $stmt->execute([$userId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        return array_reverse($rows);
+    }
+
+    /** @return array{count: int, volume_base: float} */
+    public function transferStatsForUser(int $userId, int $days = 90): array
+    {
+        $d = max(1, min(3660, $days));
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(amount_base), 0) AS v
+             FROM transactions
+             WHERE user_id = ? AND deleted_at IS NULL AND parent_transaction_id IS NULL
+               AND type = 'transfer' AND transaction_date >= (CURDATE() - INTERVAL " . $d . " DAY)"
+        );
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'count' => (int) ($row['c'] ?? 0),
+            'volume_base' => (float) ($row['v'] ?? 0),
+        ];
+    }
+
+    /** @return array<int, array{name: string, total: float}> */
+    public function expenseCategoryTotalsForUser(int $userId, int $limit = 8): array
+    {
+        $lim = max(1, min(30, $limit));
+        $pdo = Database::pdo();
+        $stmt = $pdo->prepare(
+            'SELECT c.name AS name, COALESCE(SUM(t.amount_base), 0) AS total
+             FROM transactions t
+             JOIN categories c ON c.id = t.category_id
+             WHERE t.user_id = ? AND t.deleted_at IS NULL AND t.parent_transaction_id IS NULL
+               AND t.type = \'expense\' AND COALESCE(t.is_internal_transfer, 0) = 0
+             GROUP BY c.id HAVING COALESCE(SUM(t.amount_base), 0) > 0
+             ORDER BY total DESC
+             LIMIT ' . $lim
+        );
+        $stmt->execute([$userId]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }

@@ -85,17 +85,18 @@ final class AdminFormController
             $role = 'user';
         }
         $repo = new UserRepository();
-        $repo->create([
+        $newId = $repo->create([
             'username' => $u,
             'email' => $e,
             'password_hash' => password_hash($p, PASSWORD_DEFAULT),
             'full_name' => trim((string) (Request::post()['full_name'] ?? '')) ?: null,
             'role' => $role,
             'is_active' => 1,
+            'include_in_analytics' => self::parseIncludeInAnalyticsPost(Request::post(), defaultIfMissing: true),
         ]);
         AuditLogger::log('user_create', Auth::id(), 'user', $u);
         Session::flash('message', 'User created.');
-        Response::redirect(Url::to('/admin/users'));
+        Response::redirect(Url::to('/admin/users/' . $newId));
     }
 
     public function userUpdate(): void
@@ -112,15 +113,29 @@ final class AdminFormController
             Session::flash('error', 'User not found.');
             Response::redirect(Url::to('/admin/users'));
         }
+        $me = Auth::id();
+        if ($me !== null && $id === $me) {
+            if (empty(Request::post()['is_active'])) {
+                Session::flash('error', 'You cannot deactivate your own account.');
+                Response::redirect(Url::to('/admin/users/' . $id));
+            }
+            $roleProbe = (string) (Request::post()['role'] ?? $cur['role']);
+            if ($roleProbe !== 'super_admin') {
+                Session::flash('error', 'You cannot remove your own super admin role.');
+                Response::redirect(Url::to('/admin/users/' . $id));
+            }
+        }
         $role = (string) (Request::post()['role'] ?? $cur['role']);
         if (! in_array($role, ['user', 'super_admin'], true)) {
             $role = 'user';
         }
+        $curIncludeDefault = filter_var($cur['include_in_analytics'] ?? true, FILTER_VALIDATE_BOOLEAN);
         $repo->update($id, [
             'email' => trim((string) (Request::post()['email'] ?? $cur['email'])),
             'full_name' => trim((string) (Request::post()['full_name'] ?? '')),
             'role' => $role,
             'is_active' => ! empty(Request::post()['is_active']),
+            'include_in_analytics' => self::parseIncludeInAnalyticsPost(Request::post(), $curIncludeDefault),
         ]);
         $newPass = (string) (Request::post()['new_password'] ?? '');
         if ($newPass !== '' && strlen($newPass) >= 8) {
@@ -128,7 +143,67 @@ final class AdminFormController
         }
         AuditLogger::log('user_update', Auth::id(), 'user', (string) $id);
         Session::flash('message', 'User updated.');
+        $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+        if ($redirect === 'detail') {
+            Response::redirect(Url::to('/admin/users/' . $id));
+        }
         Response::redirect(Url::to('/admin/users'));
+    }
+
+    public function userSetStatus(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/users'));
+        }
+        $id = (int) (Request::post()['user_id'] ?? 0);
+        $wantActive = ! empty(Request::post()['is_active']);
+        if ($id <= 0) {
+            Session::flash('error', 'Invalid user.');
+            Response::redirect(Url::to('/admin/users'));
+        }
+        $me = Auth::id();
+        if ($me !== null && $id === $me && ! $wantActive) {
+            Session::flash('error', 'You cannot suspend your own account.');
+            $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+            Response::redirect($redirect === 'detail' ? Url::to('/admin/users/' . $id) : Url::to('/admin/users'));
+        }
+        $repo = new UserRepository();
+        $cur = $repo->findByIdAny($id);
+        if (! $cur) {
+            Session::flash('error', 'User not found.');
+            Response::redirect(Url::to('/admin/users'));
+        }
+        $repo->update($id, ['is_active' => $wantActive]);
+        AuditLogger::log('user_update', Auth::id(), 'user', (string) $id);
+        Session::flash('message', $wantActive ? 'User activated.' : 'User suspended.');
+        $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+        if ($redirect === 'detail') {
+            Response::redirect(Url::to('/admin/users/' . $id));
+        }
+        Response::redirect(Url::to('/admin/users'));
+    }
+
+    public function userPrefs(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/users'));
+        }
+        $id = (int) (Request::post()['user_id'] ?? 0);
+        $repo = new UserRepository();
+        if ($id <= 0 || ! $repo->findByIdAny($id)) {
+            Session::flash('error', 'User not found.');
+            Response::redirect(Url::to('/admin/users'));
+        }
+        $theme = trim((string) (Request::post()['preference_theme'] ?? 'system'));
+        $mute = ! empty(Request::post()['preference_mute_low_balance']);
+        $repo->updateNotificationThemePreferences($id, $theme, $mute);
+        AuditLogger::log('user_update', Auth::id(), 'user', (string) $id);
+        Session::flash('message', 'Notification preferences saved.');
+        Response::redirect(Url::to('/admin/users/' . $id));
     }
 
     public function categoryStore(): void
@@ -438,7 +513,7 @@ final class AdminFormController
             Response::redirect(Url::to('/admin/wallets'));
         }
         try {
-            (new WalletService())->createWallet($targetUser, [
+            $newId = (new WalletService())->createWallet($targetUser, [
                 'name' => trim((string) (Request::post()['name'] ?? '')),
                 'wallet_type_id' => (int) (Request::post()['wallet_type_id'] ?? 0),
                 'currency_id' => (int) (Request::post()['currency_id'] ?? 0),
@@ -451,10 +526,11 @@ final class AdminFormController
             ], true);
             AuditLogger::log('wallet_create_admin', Auth::id(), 'user', (string) $targetUser);
             Session::flash('message', 'Wallet created.');
+            Response::redirect(Url::to('/admin/wallets/' . $newId));
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
-        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $targetUser])));
+        Response::redirect(Url::to('/admin/wallets'));
     }
 
     public function walletUpdate(): void
@@ -487,7 +563,44 @@ final class AdminFormController
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
-        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $owner])));
+        $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+        $returnQuery = trim((string) (Request::post()['_return_query'] ?? ''));
+        if ($redirect === 'detail') {
+            Response::redirect(Url::to('/admin/wallets/' . $wid));
+        }
+        $suffix = ($returnQuery !== '' && $returnQuery !== '0') ? ('?' . $returnQuery) : '';
+        Response::redirect(Url::to('/admin/wallets') . $suffix);
+    }
+
+    public function walletSetStatus(): void
+    {
+        $this->guard();
+        if (! Csrf::verify(Request::post()[Config::get('app.csrf_key')] ?? null)) {
+            Session::flash('error', 'Invalid session.');
+            Response::redirect(Url::to('/admin/wallets'));
+        }
+        $owner = (int) (Request::post()['wallet_user_id'] ?? 0);
+        $wid = (int) (Request::post()['wallet_id'] ?? 0);
+        $wantActive = ! empty(Request::post()['is_active']);
+        $svc = new WalletService();
+        try {
+            if ($wantActive) {
+                $svc->activateWalletForOwner($owner, $wid);
+            } else {
+                $svc->deactivateWalletForOwner($owner, $wid);
+            }
+            AuditLogger::log('wallet_update_admin', Auth::id(), 'wallet', (string) $wid);
+            Session::flash('message', $wantActive ? 'Wallet activated.' : 'Wallet deactivated.');
+        } catch (\Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        $redirect = trim((string) (Request::post()['_redirect'] ?? ''));
+        $returnQuery = trim((string) (Request::post()['_return_query'] ?? ''));
+        if ($redirect === 'detail') {
+            Response::redirect(Url::to('/admin/wallets/' . $wid));
+        }
+        $suffix = ($returnQuery !== '' && $returnQuery !== '0') ? ('?' . $returnQuery) : '';
+        Response::redirect(Url::to('/admin/wallets') . $suffix);
     }
 
     public function walletDelete(): void
@@ -506,7 +619,9 @@ final class AdminFormController
         } catch (\Throwable $e) {
             Session::flash('error', $e->getMessage());
         }
-        Response::redirect(Url::to('/admin/wallets?' . http_build_query(['user_id' => $owner > 0 ? $owner : null])));
+        $returnQuery = trim((string) (Request::post()['_return_query'] ?? ''));
+        $suffix = ($returnQuery !== '' && $returnQuery !== '0') ? ('?' . $returnQuery) : '';
+        Response::redirect(Url::to('/admin/wallets') . $suffix);
     }
 
     public function walletTypeStore(): void
@@ -591,5 +706,19 @@ final class AdminFormController
     private function guard(): void
     {
         Auth::requireSuperAdmin();
+    }
+
+    /** Reads `include_in_analytics` after optional hidden-field + checkbox pairing (never use empty() on "0"). */
+    private static function parseIncludeInAnalyticsPost(array $post, bool $defaultIfMissing): bool
+    {
+        if (! array_key_exists('include_in_analytics', $post)) {
+            return $defaultIfMissing;
+        }
+        $raw = $post['include_in_analytics'];
+        if (is_array($raw)) {
+            $raw = end($raw);
+        }
+
+        return filter_var($raw, FILTER_VALIDATE_BOOLEAN);
     }
 }

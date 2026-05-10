@@ -6,18 +6,21 @@ use App\Core\Database;
 use App\Helpers\Str;
 use App\Helpers\Url;
 use App\Helpers\View;
+use App\Repositories\UserRepository;
 
-$counts = $counts ?? ['users' => 0, 'transactions' => 0];
+$counts = $counts ?? ['users' => 0, 'users_all' => 0, 'transactions' => 0];
 $totals = $totals ?? ['income' => 0, 'expense' => 0, 'savings' => 0];
 
 $pdo = Database::pdo();
+$uAnalytics = '(' . UserRepository::analyticsIncludedUserIdsSubquery() . ')';
 
-// 6-month cashflow trend
+// 6-month cashflow trend (analytics-scoped users only)
 $monthly6 = array_reverse($pdo->query(
     "SELECT DATE_FORMAT(transaction_date,'%Y-%m') AS ym,
             SUM(CASE WHEN type='income'  AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS inc,
             SUM(CASE WHEN type='expense' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS exp
      FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL
+       AND user_id IN {$uAnalytics}
      GROUP BY ym ORDER BY ym DESC LIMIT 6"
 )->fetchAll(PDO::FETCH_ASSOC));
 
@@ -27,36 +30,41 @@ $topCats = $pdo->query(
      FROM transactions t JOIN categories c ON c.id=t.category_id
      WHERE t.deleted_at IS NULL AND t.type='expense'
        AND COALESCE(t.is_internal_transfer,0)=0 AND t.parent_transaction_id IS NULL
+       AND t.user_id IN {$uAnalytics}
      GROUP BY c.id, c.name ORDER BY total DESC LIMIT 6"
 )->fetchAll(PDO::FETCH_ASSOC);
 
-// Recent 5 users
+// Recent 5 users (included in analytics cohort)
 $recentUsers = $pdo->query(
-    "SELECT id, username, email, created_at FROM users ORDER BY id DESC LIMIT 5"
+    "SELECT id, username, email, created_at FROM users WHERE include_in_analytics = 1 ORDER BY id DESC LIMIT 5"
 )->fetchAll(PDO::FETCH_ASSOC);
 
-// New users this month
+// New users this month (analytics cohort)
 $newUsersThisMonth = (int) $pdo->query(
-    "SELECT COUNT(*) FROM users WHERE DATE_FORMAT(created_at,'%Y-%m')=DATE_FORMAT(NOW(),'%Y-%m')"
+    "SELECT COUNT(*) FROM users WHERE include_in_analytics = 1
+     AND DATE_FORMAT(created_at,'%Y-%m')=DATE_FORMAT(NOW(),'%Y-%m')"
 )->fetchColumn();
 
 // Transactions this month
 $txnThisMonth = (int) $pdo->query(
     "SELECT COUNT(*) FROM transactions WHERE deleted_at IS NULL
+     AND user_id IN {$uAnalytics}
      AND DATE_FORMAT(transaction_date,'%Y-%m')=DATE_FORMAT(NOW(),'%Y-%m')"
 )->fetchColumn();
 
 $txnPrevMonth = (int) $pdo->query(
     "SELECT COUNT(*) FROM transactions WHERE deleted_at IS NULL
+     AND user_id IN {$uAnalytics}
      AND DATE_FORMAT(transaction_date,'%Y-%m')=DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 MONTH),'%Y-%m')"
 )->fetchColumn();
 
 $activeWallets = (int) $pdo->query(
-    'SELECT COUNT(*) FROM wallets WHERE is_active = 1'
+    "SELECT COUNT(*) FROM wallets WHERE is_active = 1 AND user_id IN {$uAnalytics}"
 )->fetchColumn();
 
 $activeRecurring = (int) $pdo->query(
-    "SELECT COUNT(*) FROM recurring_schedules WHERE is_paused = 0 AND (end_date IS NULL OR end_date >= CURDATE())"
+    "SELECT COUNT(*) FROM recurring_schedules WHERE is_paused = 0 AND (end_date IS NULL OR end_date >= CURDATE())
+     AND user_id IN {$uAnalytics}"
 )->fetchColumn();
 
 $unreadNotifs = (int) $pdo->query(
@@ -142,7 +150,7 @@ $intelStripShell = 'rounded-2xl border border-slate-300/88 dark:border-slate-700
         <div class="min-w-0">
             <p class="text-[10px] font-extrabold uppercase tracking-[0.22em] text-teal-600 dark:text-teal-400">Platform control</p>
             <h2 class="mt-1 text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">Financial intelligence overview</h2>
-            <p class="mt-1 text-xs sm:text-[13px] text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">Live signals across users, liquidity, automation, and governance — scoped to the full ledger.</p>
+            <p class="mt-1 text-xs sm:text-[13px] text-slate-600 dark:text-slate-400 max-w-xl leading-relaxed">Financial signals include only accounts marked &ldquo;Include in analytics&rdquo;; excluded demo or test users stay active but do not move these charts.</p>
         </div>
         <div class="flex flex-wrap gap-2 sm:gap-2.5 shrink-0">
             <span class="inline-flex items-center gap-1.5 rounded-full border border-slate-300/90 dark:border-slate-600/70 bg-white/95 dark:bg-slate-900/60 px-3 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200 shadow-[0_6px_16px_-6px_rgba(15,23,42,0.12)] dark:shadow-sm">
@@ -170,9 +178,10 @@ $intelStripShell = 'rounded-2xl border border-slate-300/88 dark:border-slate-700
 <?php
 View::partial('components/admin/hero-kpi-gradient-card', [
     'gradientShell' => 'rounded-2xl bg-gradient-to-br from-violet-500 via-violet-600 to-violet-900 p-5 sm:p-6 text-white shadow-[0_24px_48px_-12px_rgba(91,33,182,0.42)] dark:shadow-xl dark:shadow-violet-500/28 relative overflow-hidden ring-1 ring-violet-950/18 dark:ring-white/15',
-    'label' => 'Total Users',
+    'label' => 'Users in analytics',
     'value' => number_format((int) ($counts['users'] ?? 0)),
-    'footnote' => $newUsersThisMonth > 0 ? '+' . $newUsersThisMonth . ' acquired this month' : 'Across the platform directory',
+    'footnote' => ($newUsersThisMonth > 0 ? '+' . $newUsersThisMonth . ' new this month · ' : '')
+        . number_format((int) ($counts['users_all'] ?? ($counts['users'] ?? 0))) . ' total directory accounts',
     'icon' => 'users',
     'trendChip' => $usersTrendChip,
     'trendChipClass' => $usersTrendChipClass,
@@ -363,16 +372,35 @@ View::partial('components/admin/hero-kpi-gradient-card', [
 
 <script>
 (function () {
-    var isDark = document.documentElement.classList.contains('dark');
-    var text   = isDark ? '#94a3b8' : '#475569';
-    var textHi = isDark ? '#e2e8f0' : '#0f172a';
-    var grid   = isDark ? 'rgba(148,163,184,0.08)' : 'rgba(51,65,85,0.11)';
+    var charts = [];
+    function teardown() {
+        charts.forEach(function (c) {
+            try {
+                if (c && typeof c.destroy === 'function') {
+                    c.destroy();
+                }
+            } catch (e) {}
+        });
+        charts = [];
+    }
+    function push(el, cfg) {
+        if (!el) return;
+        var ch = new ApexCharts(el, cfg);
+        charts.push(ch);
+        ch.render();
+    }
     var months = <?= json_encode($monthLabels, JSON_HEX_TAG | JSON_UNESCAPED_SLASHES) ?>;
     var inc    = <?= json_encode($incData, JSON_HEX_TAG) ?>;
     var exp    = <?= json_encode($expData, JSON_HEX_TAG) ?>;
     var catLbl = <?= json_encode($catLabels, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
     var catDat = <?= json_encode($catData, JSON_HEX_TAG) ?>;
     var sRate  = <?= json_encode($savingsRate) ?>;
+
+    function runDashboardCharts() {
+        teardown();
+        if (typeof ApexCharts === 'undefined' || typeof KhfApexTheme === 'undefined') return;
+        var tt = KhfApexTheme.tokens();
+        var isDark = KhfApexTheme.isDark();
 
     function emptyCashflowPremium() {
         return '<div class="flex flex-col items-center justify-center min-h-[200px] rounded-xl border border-dashed border-slate-300/92 dark:border-slate-700/80 bg-gradient-to-b from-white to-slate-50 dark:from-slate-900/40 dark:to-[#0d1424] px-6 py-10 text-center shadow-inner shadow-slate-900/12 dark:shadow-none">' +
@@ -393,17 +421,13 @@ View::partial('components/admin/hero-kpi-gradient-card', [
     var cashflowEl = document.getElementById('adminCashflowChart');
     if (cashflowEl) {
         if (months.length) {
-            new ApexCharts(cashflowEl, {
-                chart: {
+            push(cashflowEl, Object.assign({}, KhfApexTheme.chart({
                     type: 'area',
                     height: 236,
-                    background: 'transparent',
-                    toolbar: { show: false },
                     animations: { enabled: true, speed: 760, easing: 'easeinout' },
                     dropShadow: { enabled: true, top: isDark ? 6 : 4, blur: isDark ? 18 : 16, opacity: isDark ? 0.42 : 0.2,
                         color: isDark ? '#10b983' : '#0f766e' }
-                },
-                theme: { mode: isDark ? 'dark' : 'light' },
+                }), {
                 series: [
                     { name: 'Income',  data: inc },
                     { name: 'Expense', data: exp }
@@ -412,22 +436,24 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                 fill: {
                     type: 'gradient',
                     gradient: {
-                        shadeIntensity: isDark ? 0.42 : 0.48,
-                        opacityFrom: isDark ? 0.52 : 0.54,
-                        opacityTo: isDark ? 0.034 : 0.042,
+                        shade: tt.incomeExpenseFillShade,
+                        type: 'vertical',
+                        shadeIntensity: isDark ? 0.42 : 0.36,
+                        opacityFrom: isDark ? 0.52 : 0.42,
+                        opacityTo: isDark ? 0.034 : 0.06,
                         stops: [0, 92, 100]
                     }
                 },
                     stroke: { curve: 'smooth', width: [isDark ? 2.75 : 3, isDark ? 2.75 : 3], lineCap: 'round' },
                 xaxis: {
                     categories: months,
-                    labels: { style: { colors: text, fontSize: '11px', fontWeight: isDark ? 500 : 600 }, trim: months.length > 8 },
+                    labels: { style: { colors: tt.axisLabel, fontSize: '11px', fontWeight: isDark ? 500 : 600 }, trim: months.length > 8 },
                     axisBorder: { show: false }, axisTicks: { show: false },
                     tooltip: { enabled: false }
                 },
                 yaxis: {
                     labels: {
-                        style: { colors: text, fontSize: '11px', fontWeight: isDark ? 500 : 600 },
+                        style: { colors: tt.axisLabel, fontSize: '11px', fontWeight: isDark ? 500 : 600 },
                         formatter: function(v) {
                             var n = Number(v);
                             var a = Math.abs(n);
@@ -440,27 +466,21 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                     axisBorder: { show: false },
                     axisTicks: { show: false }
                 },
-                grid: { borderColor: grid, strokeDashArray: 4, padding: { top: 8, left: 2, right: 8 }, xaxis: { lines: { show: false } } },
-                tooltip: {
-                    theme: isDark ? 'dark' : 'light',
+                grid: Object.assign(KhfApexTheme.grid({ padding: { top: 8, left: 2, right: 8 }, xaxis: { lines: { show: false } } })),
+                tooltip: Object.assign(KhfApexTheme.tooltip({ style: { fontSize: '12px' } }), {
                     shared: true,
                     intersect: false,
-                    style: { fontSize: '12px' },
                     x: { show: true },
                     y: {
                         formatter: function (v) {
                             return 'RM ' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                         }
                     }
-                },
-                legend: {
-                    position: 'top',
-                    horizontalAlign: 'right',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    labels: { colors: textHi },
-                    markers: { width: 8, height: 8, radius: 3 }
-                },
+                }),
+                legend: Object.assign(KhfApexTheme.legendTopRight({ fontSize: '12px' }), {
+                    markers: { width: 8, height: 8, radius: 3 },
+                    labels: { colors: tt.legend }
+                }),
                 markers: { size: months.length <= 10 ? [3.75, 3.75] : [0, 0], strokeWidth: 0, hover: { size: 8 } },
                 responsive: [{
                     breakpoint: 640,
@@ -469,7 +489,7 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                         chart: { height: 212 }
                     }
                 }]
-            }).render();
+            }));
         } else {
             cashflowEl.innerHTML = emptyCashflowPremium();
         }
@@ -479,35 +499,32 @@ View::partial('components/admin/hero-kpi-gradient-card', [
     if (catsEl) {
         if (catDat.length) {
             var donutPalette = ['#f43f5e','#f97316','#eab308','#22c55e','#06b6d4','#8b5cf6'];
-            new ApexCharts(catsEl, {
-                chart: {
+            push(catsEl, Object.assign({}, KhfApexTheme.chart({
                     type: 'donut',
                     height: 232,
-                    background: 'transparent',
-                    toolbar: { show: false },
                     dropShadow: { enabled: true, blur: isDark ? 14 : 12, opacity: isDark ? 0.38 : 0.16 }
-                },
-                theme: { mode: isDark ? 'dark' : 'light' },
+                }), {
                 series: catDat,
                 labels: catLbl,
                 colors: donutPalette.slice(0, Math.max(catDat.length, 1)),
                 stroke: {
                     show: true,
                     width: isDark ? 2 : 1.25,
-                    colors: isDark ? ['#0f172acc'] : ['#e2e8f0']
+                    colors: [tt.donutRingStroke]
                 },
                 plotOptions: {
                     pie: {
                         expandOnClick: false,
                         donut: {
                             size: '66%',
+                            background: 'transparent',
                             labels: {
                                 show: true,
                                 name: { show: false },
                                 total: {
                                     show: true,
                                     label: 'Spend',
-                                    color: text,
+                                    color: tt.donutCenterLabel,
                                     fontSize: '11px',
                                     fontWeight: 700,
                                     formatter: function(w) {
@@ -521,36 +538,30 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                     }
                 },
                 dataLabels: { enabled: false },
-                legend: {
-                    position: 'bottom',
+                legend: Object.assign(KhfApexTheme.legendBottom({ fontWeight: 600 }), {
                     fontSize: '11px',
-                    fontWeight: 600,
-                    labels: { colors: text },
-                    markers: { width: 7, height: 7, radius: 2 },
                     itemMargin: { horizontal: 8, vertical: 4 }
-                },
-                tooltip: {
-                    theme: isDark ? 'dark' : 'light',
-                    style: { fontSize: '12px' },
+                }),
+                tooltip: Object.assign(KhfApexTheme.tooltip({ style: { fontSize: '12px' } }), {
                     y: {
                         formatter: function (v) {
                             return 'RM ' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
                         }
                     }
-                }
-            }).render();
+                })
+            }));
         } else {
             catsEl.innerHTML = emptyDonutPremium();
         }
     }
 
-    var gaugeEl = document.getElementById('adminSavingsGauge');
+        var gaugeEl = document.getElementById('adminSavingsGauge');
     if (gaugeEl) {
-        var trackBg = isDark ? '#1e293b' : '#cbd5e1';
-        new ApexCharts(gaugeEl, {
-            chart: { type: 'radialBar', height: 208, background: 'transparent', toolbar: { show: false },
-                dropShadow: { enabled: true, blur: 16, opacity: isDark ? 0.35 : 0.2, top: 4 } },
-            theme: { mode: isDark ? 'dark' : 'light' },
+        push(gaugeEl, Object.assign({}, KhfApexTheme.chart({
+            type: 'radialBar',
+            height: 208,
+                dropShadow: { enabled: true, blur: 16, opacity: isDark ? 0.35 : 0.2, top: 4 }
+        }), {
             series: [Math.max(0, Math.min(100, sRate))],
             colors: [sRate >= 20 ? '#0d9488' : sRate >= 10 ? '#f59e0b' : '#f43f5e'],
             plotOptions: {
@@ -558,7 +569,7 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                     startAngle: -132,
                     endAngle: 132,
                     hollow: { size: '62%', background: 'transparent' },
-                    track: { background: trackBg, strokeWidth: '94%', dropShadow: { enabled: isDark, top: 0, blur: 4, opacity: 0.25 } },
+                    track: { background: tt.radialTrack, strokeWidth: '94%', dropShadow: { enabled: isDark, top: 0, blur: 4, opacity: 0.25 } },
                     dataLabels: {
                         show: true,
                         name: { show: false },
@@ -566,14 +577,21 @@ View::partial('components/admin/hero-kpi-gradient-card', [
                             offsetY: 6,
                             fontSize: '27px',
                             fontWeight: 800,
-                            color: textHi,
+                            color: tt.donutCenterValue,
                             formatter: function(v) { return v + '%'; }
                         }
                     }
                 }
             },
             stroke: { lineCap: 'round' }
-        }).render();
+        }));
+    }
+    }
+
+    if (typeof KhfApexTheme !== 'undefined' && KhfApexTheme.mountOnTheme) {
+        KhfApexTheme.mountOnTheme(runDashboardCharts);
+    } else {
+        runDashboardCharts();
     }
 })();
 </script>

@@ -203,56 +203,117 @@ $totalBal = array_sum($bals);
 
 <script>
 (function () {
-    if (typeof ApexCharts === 'undefined') return;
-    var dark = document.documentElement.classList.contains('dark');
     var names = <?= json_encode($names, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
     var bals = <?= json_encode($bals, JSON_HEX_TAG) ?>;
-    if (names.length) {
-        new ApexCharts(document.querySelector('#dashWalletDonut'), {
-            chart: { type: 'donut', height: 292, background: 'transparent' },
-            theme: { mode: dark ? 'dark' : 'light' },
-            labels: names,
-            series: bals,
-            legend: { position: 'bottom', fontWeight: 500 },
-            colors: ['#0f766e', '#0891b2', '#6366f1', '#9333ea', '#f43f5e', '#f59e0b', '#14b8a6'],
-            fill: { type: 'gradient', gradient: { shade: dark ? 'dark' : 'light', shadeIntensity: 0.4 } },
-            dataLabels: { enabled: false },
-            plotOptions: { pie: { donut: { size: '68%', labels: {
-                show: true, name: {},
-                total: { show: true, label: 'Total', formatter: function () {
-                    var t = bals.reduce(function (a, x) { return a + (+x || 0); }, 0);
-                    return 'RM ' + Math.round(t).toLocaleString();
-                }}
-            } } } },
-            tooltip: { y: { formatter: function (v) { return 'RM ' + Number(v || 0).toLocaleString(undefined, {minimumFractionDigits: 2}); } } }
-        }).render();
+    var fnames = <?= json_encode($flowNames, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
+    var flowExp = <?= json_encode($flowExp, JSON_HEX_TAG) ?>;
+    var flowInc = <?= json_encode($flowInc, JSON_HEX_TAG) ?>;
+
+    var instances = [];
+    function teardown() {
+        instances.forEach(function (c) {
+            try {
+                if (c && typeof c.destroy === 'function') c.destroy();
+            } catch (e) {}
+        });
+        instances = [];
     }
 
-    var fnames = <?= json_encode($flowNames, JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
-    if (fnames.length) {
-        new ApexCharts(document.querySelector('#dashWalletFlow'), {
-            chart: { type: 'bar', stacked: false, toolbar: { show: false }, background: 'transparent', height: 300 },
-            theme: { mode: dark ? 'dark' : 'light' },
-            series: [
-                { name: 'Expense 90d', data: <?= json_encode($flowExp, JSON_HEX_TAG) ?> },
-                { name: 'Income 90d', data: <?= json_encode($flowInc, JSON_HEX_TAG) ?> }
-            ],
-            xaxis: { categories: fnames, labels: { rotate: fnames.length > 5 ? -25 : 0 } },
-            colors: ['#f43f5e', '#10b981'],
-            plotOptions: { bar: { borderRadius: 6, columnWidth: '58%' }, dataLabels: { position: 'top' } },
-            dataLabels: { enabled: false },
-            grid: { borderColor: dark ? '#334155' : '#e2e8f0' },
-            tooltip: {
-                theme: dark ? 'dark' : 'light',
-                shared: false,
-                y: {
-                    formatter: function (value) {
-                        return 'RM ' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
-                    }
-                }
-            },
-            legend: { position: 'top' }
-        }).render();
+    function bind() {
+        teardown();
+        if (typeof ApexCharts === 'undefined' || typeof KhfApexTheme === 'undefined') return;
+        var tt = KhfApexTheme.tokens();
+
+        if (names.length) {
+            var dEl = document.querySelector('#dashWalletDonut');
+            if (dEl) {
+                var d1 = new ApexCharts(dEl, Object.assign({}, KhfApexTheme.chart({ type: 'donut', height: 292 }), {
+                    labels: names,
+                    series: bals,
+                    stroke: { show: true, width: KhfApexTheme.isDark() ? 2 : 1.25, colors: [tt.donutRingStroke] },
+                    legend: KhfApexTheme.legendBottom({ fontWeight: 500 }),
+                    colors: ['#0f766e', '#0891b2', '#6366f1', '#9333ea', '#f43f5e', '#f59e0b', '#14b8a6'],
+                    fill: { type: 'gradient', gradient: { shade: tt.incomeExpenseFillShade, shadeIntensity: 0.4 } },
+                    dataLabels: { enabled: false },
+                    plotOptions: {
+                        pie: {
+                            donut: {
+                                size: '68%',
+                                background: 'transparent',
+                                labels: {
+                                    show: true,
+                                    name: {},
+                                    total: {
+                                        show: true,
+                                        label: 'Total',
+                                        color: tt.donutCenterLabel,
+                                        fontWeight: 600,
+                                        formatter: function () {
+                                            var t = bals.reduce(function (a, x) {
+                                                return a + (+x || 0);
+                                            }, 0);
+                                            return 'RM ' + Math.round(t).toLocaleString();
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    tooltip: Object.assign(KhfApexTheme.tooltip(), {
+                        y: {
+                            formatter: function (v) {
+                                return 'RM ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            },
+                        },
+                    }),
+                }));
+                instances.push(d1);
+                d1.render();
+            }
+        }
+
+        if (fnames.length) {
+            var bEl = document.querySelector('#dashWalletFlow');
+            if (bEl) {
+                var d2 = new ApexCharts(bEl, Object.assign({}, KhfApexTheme.chart({ type: 'bar', stacked: false, height: 300 }), {
+                    series: [
+                        { name: 'Expense 90d', data: flowExp },
+                        { name: 'Income 90d', data: flowInc },
+                    ],
+                    xaxis: {
+                        categories: fnames,
+                        labels: {
+                            rotate: fnames.length > 5 ? -25 : 0,
+                            style: { colors: tt.axisLabel, fontSize: '11px', fontWeight: 600 },
+                        },
+                    },
+                    colors: ['#f43f5e', '#10b981'],
+                    plotOptions: { bar: { borderRadius: 6, columnWidth: '58%' }, dataLabels: { position: 'top' } },
+                    dataLabels: { enabled: false },
+                    grid: KhfApexTheme.grid(),
+                    tooltip: Object.assign(KhfApexTheme.tooltip(), {
+                        shared: false,
+                        y: {
+                            formatter: function (value) {
+                                return 'RM ' + Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 });
+                            },
+                        },
+                    }),
+                    legend: Object.assign(KhfApexTheme.legendTopRight({ horizontalAlign: 'center', position: 'top' }), { offsetY: 0 }),
+                    yaxis: {
+                        labels: { style: { colors: tt.axisLabel, fontSize: '11px', fontWeight: 600 } },
+                    },
+                }));
+                instances.push(d2);
+                d2.render();
+            }
+        }
+    }
+
+    if (typeof KhfApexTheme !== 'undefined' && KhfApexTheme.mountOnTheme) {
+        KhfApexTheme.mountOnTheme(bind);
+    } else if (typeof ApexCharts !== 'undefined') {
+        bind();
     }
 })();
 </script>

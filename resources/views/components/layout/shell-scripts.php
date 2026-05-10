@@ -22,6 +22,9 @@ function toggleDark() {
     var html = document.documentElement;
     html.classList.toggle('dark');
     localStorage.setItem(<?= json_encode($themeLocalStorageKey, JSON_HEX_TAG | JSON_HEX_APOS | JSON_UNESCAPED_UNICODE) ?>, html.classList.contains('dark') ? 'dark' : 'light');
+    try {
+        window.dispatchEvent(new CustomEvent('khf-apex-theme-change', { detail: { dark: html.classList.contains('dark') } }));
+    } catch (e) {}
 }
 function <?= htmlspecialchars($midToggleFunctionName, ENT_QUOTES, 'UTF-8') ?>() {
     var sb = document.getElementById('sidebar');

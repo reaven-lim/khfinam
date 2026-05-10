@@ -12,9 +12,9 @@ INSERT INTO `exchange_rates` (`from_currency_id`, `to_currency_id`, `rate`, `eff
 (2, 1, 4.760000000000, CURDATE()),
 (3, 1, 3.450000000000, CURDATE());
 
-INSERT INTO `users` (`username`, `email`, `password_hash`, `full_name`, `role`, `is_active`) VALUES
-('superadmin', 'admin@khfinam.local', '$2y$10$LcCveUwSyNzOAPTbVUo0SOJPuFEI6TtQjw03KIEci0eAZaRJjW2t6', 'Super Admin', 'super_admin', 1),
-('demo', 'demo@khfinam.local', '$2y$10$HK22QpA9VTkkqtSRefdv3eWyHgrATs72sId4vTV0dCQWPtUh0YaSO', 'Demo User', 'user', 1);
+INSERT INTO `users` (`username`, `email`, `password_hash`, `full_name`, `role`, `is_active`, `include_in_analytics`) VALUES
+('superadmin', 'admin@khfinam.local', '$2y$10$LcCveUwSyNzOAPTbVUo0SOJPuFEI6TtQjw03KIEci0eAZaRJjW2t6', 'Super Admin', 'super_admin', 1, 1),
+('demo', 'demo@khfinam.local', '$2y$10$HK22QpA9VTkkqtSRefdv3eWyHgrATs72sId4vTV0dCQWPtUh0YaSO', 'Demo User', 'user', 1, 0);
 
 INSERT INTO `categories` (`id`, `user_id`, `parent_id`, `name`, `slug`, `type`, `color`, `icon`, `is_system`, `sort_order`) VALUES
 (1, NULL, NULL, 'Salary', 'salary', 'income', '#059669', 'payments', 1, 1),

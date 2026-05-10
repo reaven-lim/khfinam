@@ -6,6 +6,7 @@ use App\Core\Csrf;
 use App\Helpers\Config;
 use App\Helpers\Str;
 use App\Helpers\Url;
+use App\Helpers\View;
 
 $appName   = Config::get('app.name', 'KHFinaM');
 $titleText = isset($title) ? Str::e((string) $title) . ' · ' . Str::e($appName) : Str::e($appName);
@@ -47,8 +48,10 @@ $mobileNav = [
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+    <script src="<?= Str::e(Url::to('/js/khf-apex-chart-theme.js')) ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.395.0/dist/umd/lucide.min.js"></script>
     <style>
+        <?php View::partial('components/charts/apex-theme-css'); ?>
         body { font-family: 'Inter', system-ui, sans-serif; padding-bottom: env(safe-area-inset-bottom); }
         [data-lucide] { display: inline-block; vertical-align: middle; }
         .scrollbar-none::-webkit-scrollbar { display: none; }

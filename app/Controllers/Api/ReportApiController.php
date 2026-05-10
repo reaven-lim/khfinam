@@ -9,6 +9,7 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Helpers\Auth;
 use App\Repositories\TransactionRepository;
+use App\Repositories\UserRepository;
 use App\Services\ReportPdfService;
 
 final class ReportApiController
@@ -23,7 +24,8 @@ final class ReportApiController
         }
         $pdo = Database::pdo();
         $stmt = $pdo->query(
-            'SELECT transaction_date, type, title, amount_base, user_id FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL ORDER BY transaction_date DESC'
+            'SELECT transaction_date, type, title, amount_base, user_id FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL
+             AND user_id IN (' . UserRepository::analyticsIncludedUserIdsSubquery() . ') ORDER BY transaction_date DESC'
         );
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="transactions-summary.csv"');

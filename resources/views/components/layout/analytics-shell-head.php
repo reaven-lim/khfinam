@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+use App\Helpers\Url;
 use App\Helpers\View;
 
 /** @var string $titleText Full <title> text (already escaped) */
@@ -28,6 +29,7 @@ use App\Helpers\View;
         };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.49.0/dist/apexcharts.min.js"></script>
+    <script src="<?= htmlspecialchars(Url::to('/js/khf-apex-chart-theme.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.395.0/dist/umd/lucide.min.js"></script>
     <style>
         body { font-family: 'Inter', system-ui, sans-serif; }
@@ -35,24 +37,7 @@ use App\Helpers\View;
         <?php View::partial('components/layout/shell-sidebar-link-css'); ?>
         <?php View::partial('components/layout/shell-sidebar-slim-css', ['sbPrefix' => $sbPrefix]); ?>
         <?php View::partial('components/layout/shell-main-form-css'); ?>
-        html:not(.dark) .apexcharts-tooltip.apexcharts-theme-light,
-        html:not(.dark) .apexcharts-tooltip.apexcharts-theme-light .apexcharts-tooltip-title {
-            background: #ffffff !important;
-            border-color: rgb(226 232 240) !important;
-            box-shadow:
-                0 18px 44px -12px rgba(15,23,42,0.16),
-                0 8px 20px -8px rgba(15,23,42,0.1),
-                0 1px 0 rgba(255,255,255,0.92) inset !important;
-            color: #0f172a !important;
-        }
-        html:not(.dark) .apexcharts-tooltip.apexcharts-theme-light .apexcharts-tooltip-title {
-            border-bottom-color: rgb(226 232 240) !important;
-        }
-        html:not(.dark) .apexcharts-tooltip-text-y-value,
-        html:not(.dark) .apexcharts-tooltip-text-y-label { color: #334155 !important; }
-        html:not(.dark) .apexcharts-xaxis-label,
-        html:not(.dark) .apexcharts-yaxis-label { fill: rgb(71,85,105) !important; }
-        html:not(.dark) .apexcharts-legend-text { color: #334155 !important; fill: #334155 !important; }
+        <?php View::partial('components/charts/apex-theme-css'); ?>
     </style>
     <script>
     (function(){

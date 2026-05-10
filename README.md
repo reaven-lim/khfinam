@@ -33,7 +33,15 @@ Production-oriented multi-user personal and small-business finance app: incomes,
 
    **Transfers (`type = transfer`):** databases created from an older `001` before native transfers need **`database/migrations/004_transaction_transfer_type.sql`** once. The **current** `001` ships with transfer columns already; skip `004` only if those columns exist.
 
-6. *(Optional demo volume)* Generate extra sample transactions for charts:
+6. **Presentation demo dataset** (recommended for screenshots / dashboards / admin analytics):
+
+   ```bash
+   php database/tools/rich_demo_seed.php
+   ```
+
+   Re-run anytime to refresh the scripted multi-user Malaysian Ringgit storyline (see `database/tools/DEMO_SEED.md`). All cohort users (`demo`, `demo_office`, …) log in with **`Demo@123`**.
+
+   *Optional entropy (not scripted narrative):*
 
    ```bash
    php database/tools/bulk_transaction_seed.php
@@ -47,7 +55,8 @@ Production-oriented multi-user personal and small-business finance app: incomes,
 | Role        | Username     | Password    |
 |-------------|--------------|-------------|
 | Super admin | `superadmin` | `Admin@123` |
-| User        | `demo`       | `Demo@123` |
+| User (showcase after rich seed) | `demo`       | `Demo@123` |
+| Extra personas (`php database/tools/rich_demo_seed.php`) | `demo_office`, `demo_freelance`, `demo_student`, `demo_family`, `demo_sidebiz`, `demo_struggle` | `Demo@123` each |
 
 Paths below are relative to **`APP_URL`** in `.env` (no trailing slash). Combine them for the full link, e.g. `{APP_URL}/login`.
 

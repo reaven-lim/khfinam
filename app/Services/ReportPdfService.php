@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Core\Database;
 use App\Helpers\Config;
+use App\Repositories\UserRepository;
 use PDO;
 
 final class ReportPdfService
@@ -16,10 +17,12 @@ final class ReportPdfService
             require_once dirname(__DIR__, 2) . '/vendor/tecnickcom/tcpdf/tcpdf.php';
         }
         $pdo = Database::pdo();
+        $analyticsUsers = '(' . UserRepository::analyticsIncludedUserIdsSubquery() . ')';
         $sql = "SELECT DATE_FORMAT(transaction_date, '%Y-%m') AS ym,
                        SUM(CASE WHEN type='income' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS inc,
                        SUM(CASE WHEN type='expense' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS exp
-                FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL ";
+                FROM transactions WHERE deleted_at IS NULL AND parent_transaction_id IS NULL
+                  AND user_id IN {$analyticsUsers} ";
         $params = [];
         if ($from) {
             $sql .= ' AND transaction_date >= ?';

@@ -49,7 +49,7 @@ final class TransactionIntelligenceService
         }
         $sql .= $lj;
         if ($needUsername) {
-            $sql .= ' JOIN users u ON u.id = t.user_id';
+            $sql .= ' JOIN users u ON u.id = t.user_id AND u.include_in_analytics = 1';
         }
         $sql .= ' WHERE t.deleted_at IS NULL';
         $params = [];

@@ -125,6 +125,24 @@ final class WalletService
         $pdo->prepare('UPDATE wallets SET is_active = 0, updated_at = NOW() WHERE id = ? AND user_id = ?')->execute([$walletId, $ownerUserId]);
     }
 
+    public function activateWalletForOwner(int $ownerUserId, int $walletId): void
+    {
+        $pdo = Database::pdo();
+        $pdo->prepare('UPDATE wallets SET is_active = 1, updated_at = NOW() WHERE id = ? AND user_id = ?')->execute([$walletId, $ownerUserId]);
+    }
+
+    /** @return array<string, mixed>|null */
+    public function balanceRowForWallet(int $userId, int $walletId): ?array
+    {
+        foreach ($this->walletBalancesForUser($userId) as $b) {
+            if ((int) $b['wallet_id'] === $walletId) {
+                return $b;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Hard-delete only when no transactions and no recurring rules reference this wallet.
      */
@@ -190,7 +208,9 @@ final class WalletService
                          WHEN type = 'transfer' AND to_wallet_id = ? THEN amount_base
                          ELSE 0 END
                 ), 0) AS flow
-                FROM transactions WHERE user_id = ? AND deleted_at IS NULL"
+                FROM transactions
+                WHERE user_id = ? AND deleted_at IS NULL
+                  AND parent_transaction_id IS NULL"
             );
             $q->execute([$wid, $wid, $wid, $wid, $userId]);
             $flow = (float) $q->fetchColumn();
@@ -209,6 +229,27 @@ final class WalletService
         }
 
         return $out;
+    }
+
+    public function totalBalanceBaseForUser(int $userId): float
+    {
+        $sum = 0.0;
+        foreach ($this->walletBalancesForUser($userId) as $b) {
+            $sum += (float) $b['balance_base'];
+        }
+
+        return round($sum, 4);
+    }
+
+    public function hasLowBalanceWallet(int $userId): bool
+    {
+        foreach ($this->walletBalancesForUser($userId) as $b) {
+            if (! empty($b['below'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @return array<string, mixed> */

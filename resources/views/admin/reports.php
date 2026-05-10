@@ -5,16 +5,18 @@ declare(strict_types=1);
 use App\Core\Database;
 use App\Helpers\Str;
 use App\Helpers\Url;
+use App\Repositories\UserRepository;
 
 $pdo = Database::pdo();
+$uAnalytics = '(' . UserRepository::analyticsIncludedUserIdsSubquery() . ')';
 
-// 12-month income vs expense
+// 12-month income vs expense (analytics-scoped users only)
 $monthly = $pdo->query(
     "SELECT DATE_FORMAT(transaction_date, '%Y-%m') AS ym,
             SUM(CASE WHEN type='income'  AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS inc,
             SUM(CASE WHEN type='expense' AND COALESCE(is_internal_transfer,0)=0 THEN amount_base ELSE 0 END) AS exp
      FROM transactions
-     WHERE deleted_at IS NULL AND parent_transaction_id IS NULL
+     WHERE deleted_at IS NULL AND parent_transaction_id IS NULL AND user_id IN {$uAnalytics}
      GROUP BY ym ORDER BY ym ASC LIMIT 12"
 )->fetchAll(PDO::FETCH_ASSOC);
 
@@ -25,21 +27,22 @@ $topCats = $pdo->query(
      JOIN categories c ON c.id = t.category_id
      WHERE t.deleted_at IS NULL AND t.type='expense'
        AND COALESCE(t.is_internal_transfer,0)=0
-       AND t.parent_transaction_id IS NULL
+       AND t.parent_transaction_id IS NULL AND t.user_id IN {$uAnalytics}
      GROUP BY c.id, c.name
      ORDER BY total DESC
      LIMIT 8"
 )->fetchAll(PDO::FETCH_ASSOC);
 
-// Per-wallet balance estimate
+// Per-wallet balance estimate (analytics-scoped members only)
 $wallets = $pdo->query(
     "SELECT w.name,
             w.opening_balance +
-            COALESCE(SUM(CASE WHEN t.type='income' THEN t.amount_base
-                              WHEN t.type='expense' THEN -t.amount_base
+            COALESCE(SUM(CASE WHEN t.type='income' AND t.parent_transaction_id IS NULL THEN t.amount_base
+                              WHEN t.type='expense' AND t.parent_transaction_id IS NULL THEN -t.amount_base
                               ELSE 0 END), 0) AS balance
      FROM wallets w
-     LEFT JOIN transactions t ON t.wallet_id = w.id AND t.deleted_at IS NULL
+     INNER JOIN users uw ON uw.id = w.user_id AND uw.include_in_analytics = 1
+     LEFT JOIN transactions t ON t.wallet_id = w.id AND t.deleted_at IS NULL AND t.parent_transaction_id IS NULL
      GROUP BY w.id, w.name, w.opening_balance
      ORDER BY balance DESC"
 )->fetchAll(PDO::FETCH_ASSOC);
@@ -58,6 +61,9 @@ $catData     = array_map(fn(array $r): float => round((float) $r['total'], 2), $
 $walletNames = array_column($wallets, 'name');
 $walletBal   = array_map(fn(array $r): float => round((float) $r['balance'], 2), $wallets);
 ?>
+<p class="mb-3 text-xs text-slate-500 dark:text-slate-400 max-w-3xl leading-relaxed border border-slate-200/90 dark:border-slate-700 rounded-xl px-4 py-3 bg-slate-50/80 dark:bg-slate-900/40">
+    Figures below include only users with <strong class="font-semibold text-slate-700 dark:text-slate-200">Include in analytics</strong> enabled. Excluded accounts stay active; their data appears on that user&rsquo;s own admin profile and in their personal app, but not here.
+</p>
 <p class="mb-4 text-sm text-slate-600 dark:text-slate-400 flex flex-wrap gap-4">
     <a class="text-teal-700 dark:text-teal-300 underline font-medium" href="<?= Str::e(Url::to('/api/reports/csv')) ?>">Export CSV</a>
     <a class="text-teal-700 dark:text-teal-300 underline font-medium" href="<?= Str::e(Url::to('/api/reports/pdf')) ?>">Export PDF</a>

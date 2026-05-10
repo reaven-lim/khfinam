@@ -459,11 +459,24 @@ View::partial('components/analytics/insight-glass-card', [
 
 <script>
 (function () {
-    var dark = document.documentElement.classList.contains('dark');
-    var fg = dark ? '#a8b3c9' : '#5b6475';
-    var fgMuted = dark ? '#6b7589' : '#8b95a5';
-    var gridClr = dark ? 'rgba(148,163,184,0.11)' : 'rgba(71,85,105,0.12)';
-    var tipTheme = dark ? 'dark' : 'light';
+    var tok =
+        typeof KhfApexTheme !== 'undefined'
+            ? KhfApexTheme.tokens()
+            : {
+                tooltipTheme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+                legend: document.documentElement.classList.contains('dark') ? '#a8b3c9' : '#334155',
+                axisLabel: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#475569',
+                grid: document.documentElement.classList.contains('dark') ? 'rgba(148,163,184,0.14)' : 'rgba(100,116,139,0.28)',
+                markerOutline: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+                donutRingStroke: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+                foreColor: document.documentElement.classList.contains('dark') ? '#94a3b8' : '#64748b',
+            };
+    var dark = typeof KhfApexTheme !== 'undefined' ? KhfApexTheme.isDark() : document.documentElement.classList.contains('dark');
+    var fg = tok.legend;
+    var fgMuted = tok.axisLabel;
+    var gridClr = tok.grid;
+    var tipTheme = tok.tooltipTheme;
+    var outlineStroke = tok.markerOutline || (dark ? '#0f172a' : '#fff');
 
     function fmtRm(v, dec) {
         var n = typeof dec === 'number' ? dec : 2;
@@ -547,7 +560,8 @@ View::partial('components/analytics/insight-glass-card', [
             chart: {
                 type: 'area',
                 fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-                foreColor: fg,
+                foreColor: typeof tok.foreColor !== 'undefined' ? tok.foreColor : fg,
+                background: 'transparent',
                 height: Math.round(Math.min(476, Math.max(292, cashEl.offsetHeight || 372))),
                 toolbar: {
                     show: true,
@@ -581,7 +595,7 @@ View::partial('components/analytics/insight-glass-card', [
                 size: labels.length <= 24 ? (labels.length <= 14 ? 3.25 : 0) : 0,
                 hover: { sizeOffset: 4 },
                 strokeWidth: 2,
-                strokeColors: '#fff'
+                strokeColors: outlineStroke
             },
             colors: ['#10b981', '#f43f5e'],
             fill: {
@@ -686,13 +700,15 @@ View::partial('components/analytics/insight-glass-card', [
             chart: {
                 type: 'donut',
                 height: 310,
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                foreColor: tok.foreColor,
                 background: 'transparent',
                 animations: { speed: 700 }
             },
             theme: { mode: tipTheme },
             stroke: {
-                colors: dark ? '#11182733' : '#ffffff',
-                width: 2,
+                colors: [tok.donutRingStroke || (dark ? '#0f172a' : '#ffffff')],
+                width: dark ? 2 : 1.25,
                 dashArray: 0
             },
             labels: catLbl,
@@ -781,6 +797,9 @@ View::partial('components/analytics/insight-glass-card', [
             chart: {
                 type: 'bar',
                 toolbar: { show: false },
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                foreColor: tok.foreColor,
+                background: 'transparent',
                 height: typeof window !== 'undefined' && window.matchMedia('(min-width:1280px)').matches ? 292 : (window.matchMedia('(min-width:1024px)').matches ? 280 : 276),
                 redrawOnParentResize: true
             },
@@ -855,7 +874,15 @@ View::partial('components/analytics/insight-glass-card', [
     var lineEl = document.querySelector('#txChartSpendLine');
     if (lineEl && labels.length && typeof ApexCharts !== 'undefined') {
         new ApexCharts(lineEl, {
-            chart: { type: 'area', toolbar: { show: false }, height: 264, redrawOnParentResize: true },
+            chart: {
+                type: 'area',
+                toolbar: { show: false },
+                height: 264,
+                redrawOnParentResize: true,
+                foreColor: tok.foreColor,
+                background: 'transparent',
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif'
+            },
             stroke: {
                 curve: 'smooth',
                 width: [2.8],
@@ -880,7 +907,7 @@ View::partial('components/analytics/insight-glass-card', [
             markers: {
                 size: labels.length <= 18 ? (labels.length <= 10 ? 3 : 0) : 0,
                 strokeWidth: 2,
-                strokeColors: '#fff',
+                strokeColors: outlineStroke,
                 hover: { sizeOffset: 4 }
             },
             theme: { mode: tipTheme },
@@ -941,7 +968,15 @@ View::partial('components/analytics/insight-glass-card', [
     var volEl = document.querySelector('#txChartVolume');
     if (volEl && labels.length && typeof ApexCharts !== 'undefined') {
         new ApexCharts(volEl, {
-            chart: { type: 'bar', toolbar: { show: false }, height: 268, redrawOnParentResize: true },
+            chart: {
+                type: 'bar',
+                toolbar: { show: false },
+                height: 268,
+                redrawOnParentResize: true,
+                foreColor: tok.foreColor,
+                background: 'transparent',
+                fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif'
+            },
             plotOptions: {
                 bar: {
                     borderRadius: 6,
